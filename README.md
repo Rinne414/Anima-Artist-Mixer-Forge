@@ -88,6 +88,4 @@ Special thanks to **汐浮尘/utowo** for co-development, testing, and design co
 
 ## License
 
-## License
-
 MIT License. See [LICENSE](LICENSE) for the full text.
