@@ -1,0 +1,27 @@
+# Python 编译产物
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# 虚拟环境（如果你本地用的话）
+.venv/
+venv/
+env/
+
+# IDE / 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# 测试 / 调试输出
+*.log
+*.tmp
+.pytest_cache/
+
+# ComfyUI 用户可能在节点目录里临时放的东西
+test_outputs/
+debug_*.png
