@@ -6,6 +6,8 @@ This is a ComfyUI custom node that provides **multi-artist mixing** for the Anim
 
 The companion `AnimaArtistPack` node provides a one-shot experience: write your artist list in one text box (comma or newline separated) and your main prompt in another. The node automatically splits, encodes, and packages everything for downstream use.
 
+This README documents the **v24 architecture**, which adds layered cross-seed stabilization (EMA / SVD / static-capture / anchor-Q), CFG-style strength extrapolation, and a new linear injection-layer weight syntax `::name::weight`. Older versions are still functionally a subset.
+
 ## What problem it solves
 
 Anima uses an LLM as its text encoder (unlike SDXL's CLIP). LLM encoders are heavily **contextualized** — every token's embedding fuses semantics from surrounding tokens. This has a direct consequence:
@@ -44,6 +46,23 @@ Each layer's injection is wrapped in exception isolation: if a single layer's in
 
 ComfyUI batches cond and uncond into a single `batch=2` forward, with `transformer_options["cond_or_uncond"]` marking each row. This node injects only into the cond rows by default; uncond rows keep their original base context, so CFG guidance is preserved naturally. `apply_to_uncond` defaults to False and is not recommended to enable.
 
+## The cross-seed instability problem (and how v24 addresses it)
+
+In multi-artist setups, the same prompt with different seeds tends to produce **noticeably different style mixes** — sometimes wlop dominates, other times sakimichan does, even though their weights are equal. This is structural, not a bug:
+
+- The cross-attn Q comes from base hidden state, which is seed-driven
+- For each seed, attention picks slightly different artist token weights
+- Across seeds, the "dominant artist" can flip
+
+v24 layers four optional stabilizers, ordered from light to heavy (configured in `AnimaArtistOptions`):
+
+1. **artist_ema_alpha**  — temporal EMA smoothing across sampling steps
+2. **combine_mode = lowrank_avg + lowrank_k**  — SVD low-rank constraint on multi-artist deltas
+3. **artist_static_capture + static_capture_k**  — freeze artist attention after the first K steps
+4. **artist_anchor_q**  — replace user-seed Q with a fixed-seed anchor's Q (most aggressive, ~fully decouples cross-seed)
+
+These can be combined freely. None of them are on by default — leaving them off gives the original v17-equivalent behavior.
+
 ## Mathematical limits of artist mixing
 
 Up front: **this node cannot achieve the near-lossless artist mixing that SDXL does.**
@@ -54,6 +73,7 @@ In practice:
 - Style-similar artists tend to mix well
 - Style-divergent artists may "regress to the mean", landing in a compromise that resembles neither A nor B. This is more pronounced with weight normalization on (the default), since features get averaged after being normalized to relative proportions
 - Extreme weight ratios (e.g. `"1.0, 0.05"`) typically collapse back to the dominant artist's pure style
+- v24's `lowrank_avg` (k=1) deliberately accepts more "regression to the mean" in exchange for cross-seed stability — good for production, less suited to experimental style exploration
 
 ## Requirements
 
@@ -72,7 +92,6 @@ ComfyUI/custom_nodes/<this-plugin-folder>/
 Restart ComfyUI. No extra dependencies.
 
 ## Quick start
-
 ![workflow](docs/images/workflow.png)
 
 ```
@@ -92,7 +111,7 @@ Key points:
 - Write your main prompt in the bottom text box
 - Connect `AnimaArtistCrossAttn`'s `base_prompt` output directly to KSampler's positive input
 - Encode the negative prompt independently with `CLIPTextEncode`; it does not go through this plugin
-- Advanced controls (layer range, sampling-step range, normalization toggle) come via the optional `AnimaArtistOptions` node
+- Advanced controls (layer range, sampling-step range, stabilizers) come via the optional `AnimaArtistOptions` node
 
 ## Parameters
 
@@ -101,12 +120,12 @@ Key points:
 | Parameter | Type | Description |
 |---|---|---|
 | `clip` | CLIP | Anima-compatible CLIP |
-| `artist_chain` | STRING (multiline) | Artist chain. Comma or newline separated. Supports CLIP weighting syntax like `(wlop:1.2)` |
+| `artist_chain` | STRING (multiline) | Artist chain. Comma or newline separated. Supports both CLIP weighting `(wlop:1.2)` and the new injection-layer weight `::wlop::1.5`, including stacking |
 | `base_prompt` | STRING (multiline, optional) | Main prompt. Leave empty to encode artists alone |
 
-Outputs `ANIMA_PACK`, an internal struct holding each artist's separately-encoded conditioning, the artist label list, and a separately-encoded conditioning for the bare base prompt.
+Outputs `ANIMA_PACK`, an internal struct holding each artist's separately-encoded conditioning, the artist label list, the parsed per-artist weights, and a separately-encoded conditioning for the bare base prompt.
 
-How it works internally: the node splits `artist_chain` into N artist names and encodes each as `<artist_name>\n<base_prompt>` (Anima's recommended format: artist first, newline, then main prompt). It also encodes a clean copy of `base_prompt` alone for use as KSampler's positive conditioning.
+How it works internally: the node splits `artist_chain` into N artist names, parses any `::name::weight` syntax to extract per-artist injection weights (which are stripped before CLIP encoding), and encodes each as `<artist_name>\n<base_prompt>` (Anima's recommended format: artist first, newline, then main prompt). It also encodes a clean copy of `base_prompt` alone for use as KSampler's positive conditioning.
 
 ### AnimaArtistCrossAttn (main node)
 
@@ -114,9 +133,9 @@ How it works internally: the node splits `artist_chain` into N artist names and 
 |---|---|---|
 | `model` | MODEL | Anima model |
 | `artist_pack` | ANIMA_PACK | Output from `AnimaArtistPack` |
-| `combine_mode` | enum | How multiple artists are merged: `output_avg` (recommended) / `concat` |
-| `fusion_mode` | enum | How merged artists act on the main prompt: `interpolate` (recommended) / `concat_with_base` |
-| `strength` | FLOAT 0~1 | Overall artist contribution strength |
+| `combine_mode` | enum | How multiple artists are merged: `output_avg` (recommended) / `concat` / `lowrank_avg` (cross-seed-stable) |
+| `fusion_mode` | enum | How merged artists act on the main prompt: `interpolate` (recommended) / `concat_with_base` / `base_preserve` |
+| `strength` | FLOAT 0~4 | Overall artist contribution. 0~1 = interpolation, 1~4 = CFG-style extrapolation (style amplified) |
 | `enabled` | BOOLEAN | Master switch |
 | `apply_to_uncond` | BOOLEAN | Default False, **not recommended** (breaks CFG) |
 | `advanced_options` | ANIMA_OPTS | Optional advanced controls |
@@ -133,8 +152,16 @@ Not connecting this node = default behavior. Connecting it makes its settings ta
 |---|---|
 | `start_block` / `end_block` | Inject only on DiT blocks in `[start, end]`. `end_block = -1` means up to the last block |
 | `start_percent` / `end_percent` | Inject only during sampling progress in `[start, end]`. `0.0` = sampling start, `1.0` = end |
-| `normalize_weights` | True: weights are normalized to relative proportions. False: weights act as independent strength multipliers (see below) |
-| `layer_filter` | Advanced layer-selection string (overrides start_block/end_block). Example: `"0,3,5-10,-1"` = blocks 0, 3, 5 through 10, and the last block |
+| `normalize_weights` | True: weights are normalized to relative proportions. False: weights act as independent strength multipliers. Auto-bypassed when any artist uses `::weight` syntax |
+| `layer_filter` | Advanced layer-selection string (overrides start_block/end_block). Example: `"0,3,5-10,-1"` |
+| `artist_ema_alpha` | Temporal EMA on artist attention output across steps. 0 = off |
+| `lowrank_k` | SVD truncation rank for `lowrank_avg`. 1 = most stable |
+| `artist_static_capture` | Freeze artist attention after `static_capture_k` warmup steps |
+| `static_capture_k` | Number of warmup steps before freezing. Default 6, range 1~12 |
+| `artist_anchor_q` | Replace user-seed Q with a fixed-seed anchor's Q. The strongest cross-seed stabilizer |
+| `anchor_seeds_count` | Number of anchor seeds to average. Default 1, range 1~4 |
+| `anchor_user_blend` | Blend ratio between anchor Q and user Q. 0 = pure anchor, 1 = pure user |
+| `anchor_deep_layer_threshold` | Use anchor for shallow layers `[0, N)`, user Q for deep layers `[N, end]`. -1 disables |
 
 ## Core concepts
 
@@ -163,6 +190,19 @@ Single cross-attention call, but all artists compete in the same softmax. The pa
 
 Pros: single forward, fast. Cons: attention is shared across artists, typically less expressive than output_avg.
 
+#### `lowrank_avg` (v22, cross-seed stable)
+
+A stabilized variant of `output_avg`. Each artist's attention output minus the base output gives a delta tensor; the N delta tensors are stacked into a matrix `D ∈ ℝ^(N × M)`. SVD truncates `D` to its top-k principal components before reconstructing and weighted-averaging:
+
+```
+delta_i = cross_attn(x, K_i, V_i) - base_out
+D = stack(delta_i)
+D_lowrank = SVD_truncate(D, k)
+artist_total = base_out + sum_i (w_i * D_lowrank[i])
+```
+
+Why it stabilizes cross-seed: the seed-flipping "dominant artist" effect is largely high-rank noise in `D`. Truncating to top-k strips that noise. `k=1` (the default) projects all artists onto a single shared direction, giving maximum stability at the cost of artists looking more homogeneous. `k=2` or `3` keeps small per-artist differentiation. `k >= N` is mathematically equivalent to `output_avg` (no projection).
+
 > Earlier versions had `mean` and `weighted_sum` modes (per-position weighted average over LLMAdapter outputs). They were removed: position-i in different artists carries different semantics, so element-wise averaging causes K/V semantic misalignment and inevitably produces broken images. A `replace` mode was also removed: it discards the main prompt's role in cross-attention entirely, severely degrading prompt adherence.
 
 ### fusion_mode: how the merged artist acts on the main prompt
@@ -175,7 +215,7 @@ Base and artist each run cross-attention once, then outputs are linearly interpo
 out = base_out * (1 - strength) + artist_out * strength
 ```
 
-Strength is strictly controllable (`strength=0` = pure base, `strength=1` = pure artist). Smooth transitions, minimal style drift. Cost: one extra base forward per layer.
+With `strength` in `[0, 1]`, this is strict interpolation (`strength=0` = pure base, `strength=1` = pure artist). With `strength` in `(1, 4]`, it becomes CFG-style extrapolation: `out = base_out + strength * (artist_out - base_out)` — the artist's deviation from base is amplified, producing a stronger style. Smooth transitions, minimal style drift. Cost: one extra base forward per layer.
 
 #### `concat_with_base`
 
@@ -191,28 +231,127 @@ The softmax decides per-pixel-position whether to attend to base or artist. With
 
 Pros: base prompt stays in the attention computation, so prompt adherence is best preserved. Artist still dominates style, but with the lightest drift.
 
-## Recommended combination
+#### `base_preserve` (v17)
 
-For day-to-day use:
+Decomposes the artist contribution into components parallel and perpendicular to the base output, and only injects the perpendicular component:
+
+```
+delta = artist_total - base_out
+delta_perp = delta - proj_to_base(delta)
+out = base_out + strength * delta_perp
+```
+
+The base direction is left untouched; the artist can only add a sideways offset. Mild style impact, good for keeping the main prompt in firm control. Useful when `interpolate` shifts composition more than desired.
+
+## Cross-seed stabilizers in detail
+
+All four stabilizers are off by default. Enable progressively from light to heavy.
+
+### artist_ema_alpha (lightest)
+
+Applies a per-layer exponential moving average to the artist attention output across sampling steps:
+
+```
+artist_total_t = alpha * artist_total_{t-1} + (1 - alpha) * artist_total_t
+```
+
+Reasoning: cross-step jitter in artist attention often comes from the dominant artist flipping under shifting cross-attn QK match. EMA smooths this over time. Effective mainly on `interpolate` and `base_preserve` (not `concat_with_base`, where the artist isn't isolated).
+
+Range 0~0.95. 0.3~0.5 is a light effect, 0.5~0.8 is medium-heavy. Higher values can lag the style behind the base content.
+
+Cache resets when sigma jumps up (i.e. a new sampling run begins).
+
+### lowrank_avg + lowrank_k (medium)
+
+See `combine_mode = lowrank_avg` above. The SVD constraint is permanent (every step), unlike EMA which only smooths over time. More aggressive but more uniform-feeling result.
+
+### artist_static_capture + static_capture_k (heavy, also a perf win)
+
+During the first K sampling steps, the artist attention output is computed and accumulated. After step K, the average is **frozen** and reused for all remaining steps. Subsequent steps skip the artist cross-attention entirely.
+
+Why this works: after a few denoising steps, the user hidden state has stabilized enough that further per-step recomputation of artist attention only adds jitter without adding style. Freezing decouples style from later-step content fluctuations.
+
+Side benefit: steps after K skip N artist cross-attention forwards each, giving 30~50% wall-clock speedup at typical K=6, N=5~7.
+
+`K` ranges 1~12, default 6. Lower K = earlier freeze = more stable but earlier commitment to a possibly-suboptimal style estimate. Higher K = later freeze = closer to non-frozen behavior.
+
+Cache resets on sigma jump. Mutually exclusive with EMA (which becomes a no-op once frozen).
+
+### artist_anchor_q (heaviest, true cross-seed decoupling)
+
+Root cause of cross-seed style drift: the cross-attn Q comes from base hidden state, which is seed-driven. v23 fully addresses this by **replacing the Q's source with a fixed-seed anchor's hidden state**:
+
+1. On first invocation, the plugin runs a single-step "anchor pass" using a fixed seed (default 42) with the user's prompt context
+2. Each layer's pre-cross-attn hidden state is captured during this anchor pass and cached
+3. During real sampling, when computing artist attention, Q is sourced from the anchor's cached hidden state instead of the user's current hidden state
+4. The base attention still uses user Q (so base content adapts to user seed normally)
+
+Result: artist attention is identical across all seeds for the same prompt + resolution. Cross-seed style drift drops to near-zero.
+
+Cache key is `(x.shape, id(context))` — same prompt + same resolution reuses the anchor for free across seeds. Different prompt or different resolution triggers a fresh anchor pass.
+
+First-time cost: ~1 extra step worth of forward time for the anchor pass. After that, zero overhead per seed.
+
+**Sub-options for finer control**:
+
+- `anchor_seeds_count` (1~4, default 1): runs N anchor passes with different fixed seeds and averages their hidden states. Mitigates the small chance that a single fixed seed produces a systematically biased anchor. Cost scales linearly with N.
+- `anchor_user_blend` (0~1, default 0): blends anchor Q with user Q. 0 = pure anchor (max stability), 1 = pure user (equivalent to disabling anchor). Useful if pure anchor produces brushwork that looks slightly disconnected from the actual content.
+- `anchor_deep_layer_threshold` (-1~64, default -1 = disabled): when set to N, layers `[0, N)` use anchor Q (style stability) while layers `[N, end]` use user Q (content fidelity). Based on the principle that early DiT blocks set style and late blocks add detail.
+
+Mutually exclusive with `artist_static_capture` (anchor takes priority, with a warn log).
+
+## Recommended combinations
+
+### Daily use, no stabilizers
 
 ```
 combine_mode = output_avg
 fusion_mode  = interpolate
-strength     = 0.6 ~ 0.8
+strength     = 1.0
 ```
 
-To control individual artist strength within the chain, use CLIP weighting syntax inside `artist_chain`:
+### Light cross-seed improvement
 
 ```
-wlop, (sakimichan:1.2), (krenz:0.7)
+combine_mode      = output_avg
+fusion_mode       = interpolate
+strength          = 1.0
+artist_ema_alpha  = 0.4
 ```
 
+### Strong cross-seed stability + style amplification
+
+```
+combine_mode      = lowrank_avg
+lowrank_k         = 1
+fusion_mode       = interpolate
+strength          = 2.0
+artist_static_capture = True
+static_capture_k  = 6
+```
+
+### Maximum cross-seed stability (production)
+
+```
+combine_mode      = output_avg
+fusion_mode       = interpolate
+strength          = 1.5
+artist_anchor_q   = True
+anchor_seeds_count = 1
+anchor_user_blend = 0.0
+```
+
+To control individual artist strength within the chain, use either weight syntax inside `artist_chain`:
+
+```
+wlop, ::sakimichan::1.2, (krenz:0.7)
+```
 
 ## Performance notes
 
 ### Computational cost
 
-In `output_avg` mode, each layer runs `N + 1` cross-attention forwards (N artists + base). This is mathematical necessity:
+In `output_avg` and `lowrank_avg` modes, each layer runs `N + 1` cross-attention forwards (N artists + base). This is mathematical necessity:
 
 ```
 sum_i (w_i * softmax(Q @ K_i^T / √d) @ V_i)
@@ -222,13 +361,15 @@ Each softmax must be computed independently over its own K, V. Merging into a si
 
 ### Approximate timing (30 steps, varies by GPU)
 
-| Artist count | Relative time |
+| Configuration | Relative time |
 |---|---|
-| 1 | 1.0x (baseline) |
-| 4 | ~1.4x |
-| 8 | ~1.7x |
+| 1 artist | 1.0x (baseline) |
+| 4 artists | ~1.4x |
+| 8 artists | ~1.7x |
+| 5 artists + `artist_static_capture` (K=6) | ~1.1x |
+| 5 artists + `artist_anchor_q` (cached, 2nd seed onward) | ~1.05x |
 
-**More artists means more time** — there's no way to eliminate this fundamental cost.
+**More artists means more time** — but `artist_static_capture` and `artist_anchor_q` largely amortize this away after the warmup steps.
 
 ### Strongly recommended: use layer range and step range to reduce cost
 
@@ -237,7 +378,7 @@ After connecting `AnimaArtistOptions`, you can **dramatically cut generation tim
 - **Layer range** (`start_block / end_block` or `layer_filter`): inject only on specific DiT blocks. `0..13` (front half) cuts time roughly in half. Artist style is mostly determined by early blocks, so the loss is usually acceptable
 - **Sampling-step range** (`start_percent / end_percent`): inject only during a portion of sampling. `0.0..0.5` (first half) similarly cuts time, since artist style is mostly absorbed during early sampling
 
-Both can be **combined**: "front-half layers + front-half sampling" can bring 8-artist scenarios back to near-single-artist timing. This is the most effective optimization for multi-artist setups.
+Both can be **combined**: "front-half layers + front-half sampling" can bring 8-artist scenarios back to near-single-artist timing. This is the most effective optimization for multi-artist setups, and stacks with `artist_static_capture` / `artist_anchor_q`.
 
 ## How to write the artist chain
 
@@ -248,8 +389,8 @@ The two text boxes of `AnimaArtistPack` have distinct roles:
 ```
 artist_chain (top box):
   wlop
-  (sakimichan:1.2)
-  krenz
+  ::sakimichan::1.2
+  (krenz:0.7)
 
 base_prompt (bottom box):
   masterpiece, 1girl, standing, in a forest, ...
@@ -257,14 +398,46 @@ base_prompt (bottom box):
 
 Internally the node concatenates each as `<artist_name>\n<base_prompt>` before encoding — Anima's empirically most stable format. You don't need to repeat artist names in the main prompt.
 
-Weight controls:
-- Inside `artist_chain`, use CLIP weighting `(name:weight)` to adjust individual artist strength
-- Overall artist contribution is controlled by `AnimaArtistCrossAttn`'s `strength`
-- Whether multi-artist weights are normalized is controlled by `AnimaArtistOptions.normalize_weights`
+### Two layers of weighting
 
-## Advanced options in detail
+There are **two independent** weighting points:
 
-After connecting `AnimaArtistOptions`:
+1. **CLIP weighting** (`(name:1.2)` syntax): scales token embeddings before they pass through the LLMAdapter (a non-linear 6-layer transformer). Outcome isn't strictly predictable but stays close to the LLM's natural output distribution. Same as SD/A1111 syntax.
+2. **Injection-layer weighting** (`::name::1.5` syntax, v24): scales the artist's contribution at the cross-attention output stage. Linear and predictable: `::name::2.0` makes that artist's relative contribution exactly twice as strong as a default-weight artist.
+
+They can be **stacked**: `::(wlop:1.1)::0.8` applies CLIP weight 1.1 first, then injection weight 0.8.
+
+When any artist uses `::weight` syntax, `normalize_weights` is automatically bypassed (the explicit weights are honored as-is).
+
+Global artist contribution is controlled by `AnimaArtistCrossAttn`'s `strength` (independent of per-artist weights).
+
+### Important note on heavy weights
+
+Do **not** push both `strength` and multiple `::weight` values high at once when you have many artists. Cross-attn output magnitude is roughly `strength * sum(::weight)`, which becomes unstable past ~6-8x baseline. Symptoms: oversaturation, noise patches, or fully broken output. Default values (`strength=1`, no `::weight`) are always safe.
+
+### When `normalize_weights = False`
+
+Default `normalize_weights = True`: in `output_avg`, N artists' weights are normalized to `1/N` each, so **total contribution always equals 1**.
+
+With normalization off and no `::weight` used: each artist contributes at its raw weight (default 1.0). **Total contribution = N**, which exceeds the model's training distribution and produces pure noise.
+
+The node intercepts dangerous configurations (when `::weight` is not in use):
+
+| Artist count + normalize=False | Behavior |
+|---|---|
+| 1 artist | Normal (equivalent to normalized) |
+| 2~3 artists | Warning, but allowed (may overexpose) |
+| 4+ artists | **Hard error**, with three suggested fixes |
+
+If you actually want "one artist weakened", the **recommended approach is to keep normalize_weights=True** and use either CLIP weighting `(name:0.3)` or injection weighting `::name::0.3` to lower a specific artist:
+
+```
+wlop, ::krenz::0.3
+```
+
+This keeps wlop dominant with a krenz accent, without breaking total-contribution stability.
+
+## Advanced layer/step controls
 
 ### Layer range (`start_block` / `end_block`)
 
@@ -293,58 +466,15 @@ Different sampling stages determine different image content (high sigma = compos
 
 Implementation detail: the node uses `set_model_unet_function_wrapper` to capture the current sigma at each `apply_model` call, then maps user-set percent ranges to sigma ranges via `model_sampling.percent_to_sigma()`.
 
-### Important note when `normalize_weights = False`
-
-Default `normalize_weights = True`: in `output_avg`, N artists' weights are normalized to `1/N` each, so **total contribution always equals 1**.
-
-With normalization off: each artist contributes at its raw weight. **Total contribution = N**, which exceeds the model's training distribution and produces pure noise.
-
-The node intercepts dangerous configurations:
-
-| Artist count + normalize=False | Behavior |
-|---|---|
-| 1 artist | Normal (equivalent to normalized) |
-| 2~3 artists | Warning, but allowed (may overexpose) |
-| 4+ artists | **Hard error**, with three suggested fixes |
-
-If you actually want "one artist weakened", the **recommended approach is to keep normalize_weights=True** and use CLIP weighting in `artist_chain` to lower a specific artist:
-
-```
-wlop, (krenz:0.3)
-```
-
-This keeps wlop dominant with a krenz accent, without breaking total-contribution stability.
-
-## Two layers of weighting
-
-There are **two independent** weighting points in practice:
-
-1. **CLIP weighting** (`(name:1.2)` syntax inside `artist_chain`): scales token embeddings before they pass through the LLMAdapter (a non-linear 6-layer transformer). Outcome isn't strictly predictable but stays close to the LLM's natural output distribution
-2. **Node `strength`**: scales the overall artist contribution relative to base in cross-attention output space, with strict proportionality
-
-Different mechanisms: CLIP weighting adjusts "relative strength within the artist chain"; `strength` adjusts "overall artist vs main prompt ratio". Use them independently or together.
-
 ## Known issues
 
 ### `model_function_wrapper` chain conflicts
 
-When sampling-step range is enabled (`start_percent > 0` or `end_percent < 1`), this node uses `set_model_unet_function_wrapper` to capture per-step sigma. The implementation is chain-safe — it preserves and forwards calls to any pre-existing wrapper.
+When sampling-step range or any cross-seed stabilizer is enabled, this node uses `set_model_unet_function_wrapper` to capture per-step sigma. The implementation is chain-safe — it preserves and forwards calls to any pre-existing wrapper.
 
-However, if another custom node connected **after** this one sets a wrapper without chain-safety (overwriting blindly), the sigma capture is lost, and step-range control silently degrades to "always inject".
+However, if another custom node connected **after** this one sets a wrapper without chain-safety (overwriting blindly), the sigma capture is lost, and step-range / EMA-reset / static-capture-reset all silently degrade.
 
-Diagnosis: reset both percent values to 0.0 / 1.0 to recover normal behavior.
-
-## Future optimization directions
-
-In rough priority order, for future contributors. Technical sketches in `OPTIMIZATION_NOTES.md`.
-
-1. **Promote existing `start_percent / end_percent` usage**: zero-cost lazy injection — currently the highest-value optimization in the architecture
-2. **Re-enable batched parallel forward**: combine N artist forwards into a single batch=N call, restoring previously-removed optimization (needs stability validation)
-3. **Attention-output deferred cache** (medium complexity): accumulate artist injection contribution during early sampling, reuse as a static bias later. Expected ~1.5-2x speedup
-4. **K/V projection cross-step cache** (medium complexity, low payoff): ~1.1x speedup
-5. **Adaptive injection schedule** (research level)
-
-Issues / PRs welcome.
+Diagnosis: reset `start_percent / end_percent` to 0.0 / 1.0 and disable all stabilizers; if behavior recovers, another node is overwriting the wrapper.
 
 ## Acknowledgements
 
@@ -353,3 +483,4 @@ Special thanks to **汐浮尘** for co-development, testing, and design contribu
 ## License
 
 MIT License. See [LICENSE](LICENSE) for the full text.
+
