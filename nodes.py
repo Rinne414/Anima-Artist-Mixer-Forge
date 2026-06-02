@@ -788,8 +788,9 @@ def _default_builder_routes(layout, count, num_blocks):
     return [""] * count, [""] * count
 
 
-def _parse_builder_artist_table(artist_table):
+def _parse_builder_artist_table(artist_table, return_warnings=False):
     rows = []
+    warnings = []
     for raw_line in str(artist_table or "").splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
@@ -801,14 +802,18 @@ def _parse_builder_artist_table(artist_table):
             try:
                 weight = float(parts[1])
             except ValueError:
+                label = name or "(empty artist)"
+                warnings.append(f"invalid weight for {label}: {parts[1]}; using 1.0")
                 weight = 1.0
         layer_route = parts[2] if len(parts) > 2 else ""
         timing_route = parts[3] if len(parts) > 3 else ""
         rows.append((name, weight, layer_route, timing_route))
+    if return_warnings:
+        return rows, warnings
     return rows
 
 
-def _build_artist_chain_from_rows(layout, rows, num_blocks=28):
+def _build_artist_chain_from_rows(layout, rows, num_blocks=28, extra_warnings=None):
     cleaned_rows = []
     for name, weight, layer_route, timing_route in rows:
         name = _sanitize_artist_name_for_builder(name)
@@ -822,7 +827,9 @@ def _build_artist_chain_from_rows(layout, rows, num_blocks=28):
     weights = []
     layer_routes = []
     timing_routes = []
-    warnings = []
+    warnings = list(extra_warnings or [])
+    if not cleaned_rows:
+        warnings.append("no artists; add at least one artist")
     for idx, (name, weight, layer_route, timing_route) in enumerate(cleaned_rows):
         if layout != CHAIN_LAYOUT_MANUAL:
             if not layer_route and idx < len(routes):
@@ -847,9 +854,11 @@ def _build_artist_chain_from_rows(layout, rows, num_blocks=28):
         timing_routes.append(timing_route)
 
     chain = "\n".join(entries)
+    status = "CHECK" if warnings else "OK"
     lines = [
         "Anima Artist Chain Builder",
         "",
+        f"status: {status}",
         f"layout: {layout}",
         f"artists: {len(entries)}",
         "",
@@ -865,6 +874,13 @@ def _build_artist_chain_from_rows(layout, rows, num_blocks=28):
         lines.extend(f"  - {w}" for w in warnings)
     else:
         lines.append("  - no obvious builder issue")
+    lines.extend([
+        "",
+        "next steps:",
+        "  - connect artist_chain to AnimaArtistPack.artist_chain",
+        "  - connect AnimaArtistPack.artist_pack to AnimaArtistCrossAttn.artist_pack",
+        "  - use AnimaArtistPreset first; switch to compatibility_safe if other attention patch nodes are present",
+    ])
     return chain, "\n".join(lines)
 
 
@@ -898,10 +914,12 @@ def _format_artist_chain_preview(artist_chain, num_blocks=28):
             entry = f"{entry}%{timing_route}"
         cleaned_entries.append(entry)
     cleaned_chain = "\n".join(cleaned_entries)
+    status = "CHECK" if warnings else "OK"
 
     lines = [
         "Anima Artist Chain Preview",
         "",
+        f"status: {status}",
         f"artists: {len(names)}",
         f"explicit weights: {_format_bool(has_explicit)}",
         "",
@@ -927,6 +945,12 @@ def _format_artist_chain_preview(artist_chain, num_blocks=28):
         lines.extend(f"  - {w}" for w in warnings)
     else:
         lines.append("  - no obvious syntax issue")
+    lines.extend([
+        "",
+        "next steps:",
+        "  - if this report looks correct, connect cleaned_chain to AnimaArtistPack.artist_chain",
+        "  - use AnimaArtistInspector after Pack to verify effective weights and routing",
+    ])
     return cleaned_chain, "\n".join(lines)
 
 
@@ -1987,13 +2011,18 @@ class AnimaArtistChainBuilder:
     def build(self, layout, artist_table, artist_1, weight_1, artist_2, weight_2, artist_3, weight_3,
               layer_route_1="", timing_route_1="", layer_route_2="", timing_route_2="",
               layer_route_3="", timing_route_3="", num_blocks=28):
+        table_rows, table_warnings = _parse_builder_artist_table(
+            artist_table, return_warnings=True,
+        )
         rows = [
             (artist_1, weight_1, layer_route_1, timing_route_1),
             (artist_2, weight_2, layer_route_2, timing_route_2),
             (artist_3, weight_3, layer_route_3, timing_route_3),
         ]
-        rows.extend(_parse_builder_artist_table(artist_table))
-        chain, report = _build_artist_chain_from_rows(layout, rows, int(num_blocks))
+        rows.extend(table_rows)
+        chain, report = _build_artist_chain_from_rows(
+            layout, rows, int(num_blocks), extra_warnings=table_warnings,
+        )
         return {"ui": {"text": [report]}, "result": (chain, report)}
 
 
@@ -2290,6 +2319,112 @@ class AnimaArtistPreset:
         return {"ui": {"text": [summary]}, "result": (payload, adv, summary)}
 
 
+class AnimaArtistStarter:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "recipe": (PRESET_CHOICES, {
+                    "default": PRESET_BALANCED,
+                    "tooltip": (
+                        "第一步直接选目标。\n"
+                        "balanced: 默认安全起点\n"
+                        "strong_style: 更浓画风\n"
+                        "stable_seed: 跨 seed 更稳\n"
+                        "fast_preview: 快速找图\n"
+                        "identity_guard: 保主体/构图\n"
+                        "compatibility_safe: 有区域提示或其它 attention patch 节点时优先"
+                    ),
+                }),
+                "artist_table": ("STRING", {
+                    "multiline": True,
+                    "default": "",
+                    "tooltip": (
+                        "每行一个画师: artist | weight | layers | timing。\n"
+                        "只填 artist 也可以；weight 默认 1.0；空 layer/timing 会按 layout 自动填。"
+                    ),
+                }),
+                "layout": (CHAIN_LAYOUT_CHOICES, {
+                    "default": CHAIN_LAYOUT_LAYER_SCHEDULED,
+                    "tooltip": (
+                        "manual: 完全使用表格中的 layers/timing\n"
+                        "even_layers: 按画师数均分 DiT blocks\n"
+                        "layer_scheduled: 自动分配 layer + sampling timing，推荐新手"
+                    ),
+                }),
+                "intensity": ("FLOAT", {
+                    "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05,
+                    "tooltip": "recipe 强度倍率。compatibility_safe 和 fast_preview 不会放大 strength。",
+                }),
+            },
+            "optional": {
+                "normalize_weights": ("BOOLEAN", {
+                    "default": True,
+                    "tooltip": "多画师默认建议开启。artist_table 使用 ::weight 时运行时会自动关闭。",
+                }),
+                "layer_mode": (LAYER_MODE_CHOICES, {
+                    "default": LAYER_MODE_AUTO,
+                    "tooltip": "全局层范围快捷选择；通常保持 auto。",
+                }),
+                "custom_layer_filter": ("STRING", {
+                    "default": "",
+                    "multiline": False,
+                    "tooltip": "layer_mode=custom 时生效。例: 0,3,5-10,-1",
+                }),
+                "num_blocks": ("INT", {
+                    "default": 28, "min": 1, "max": 64, "step": 1,
+                    "tooltip": "预览用 block 数。Anima 默认 28。",
+                }),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "ANIMA_PRESET", "ANIMA_OPTS", "STRING")
+    RETURN_NAMES = ("artist_chain", "preset", "advanced_options", "guide")
+    FUNCTION = "build"
+    CATEGORY = "Anima/CrossAttn"
+    OUTPUT_NODE = True
+
+    def build(self, recipe, artist_table, layout, intensity,
+              normalize_weights=True, layer_mode=LAYER_MODE_AUTO,
+              custom_layer_filter="", num_blocks=28):
+        rows, table_warnings = _parse_builder_artist_table(
+            artist_table, return_warnings=True,
+        )
+        chain, chain_report = _build_artist_chain_from_rows(
+            layout, rows, int(num_blocks), extra_warnings=table_warnings,
+        )
+        payload = _build_preset_payload(
+            recipe, intensity, layer_mode, custom_layer_filter, normalize_weights,
+        )
+        adv = payload["advanced_options"]
+        status = "CHECK" if "status: CHECK" in chain_report else "OK"
+        guide = "\n".join([
+            "Anima Artist Starter",
+            "",
+            f"status: {status}",
+            f"recipe: {payload['preset']}",
+            f"layout: {layout}",
+            f"artists: {len(chain.splitlines()) if chain else 0}",
+            "",
+            "wire:",
+            "  - artist_chain -> AnimaArtistPack.artist_chain",
+            "  - preset -> AnimaArtistCrossAttn.preset",
+            "  - advanced_options -> AnimaArtistCrossAttn.advanced_options only if you want the explicit option payload",
+            "  - AnimaArtistPack.artist_pack -> AnimaArtistCrossAttn.artist_pack",
+            "",
+            "preset summary:",
+            f"  combine_mode: {payload['combine_mode']}",
+            f"  fusion_mode: {payload['fusion_mode']}",
+            f"  strength: {float(payload['strength']):.2f}",
+            f"  compatibility_mode: {_format_bool(adv.get('compatibility_mode', False))}",
+            f"  layer_filter: {adv.get('layer_filter') or 'all'}",
+            "",
+            "chain report:",
+            chain_report,
+        ])
+        return {"ui": {"text": [guide]}, "result": (chain, payload, adv, guide)}
+
+
 class AnimaArtistInspector:
     @classmethod
     def INPUT_TYPES(cls):
@@ -2392,6 +2527,7 @@ class AnimaArtistInspector:
         ))
 
         warnings = []
+        notes = []
         if not labels:
             warnings.append("没有画师；CrossAttn 会原样返回 base prompt。")
         if has_explicit and requested_normalize:
@@ -2414,18 +2550,26 @@ class AnimaArtistInspector:
         if any(str(timing or "").strip() for timing in timing_routes):
             warnings.append("已启用每画师时间路由；当前采样进度无匹配画师时该层会回退原始 cross-attn。")
         if adv.get("compatibility_mode", False):
-            warnings.append("compatibility_mode 已开启：已强制 concat + concat_with_base，并关闭重型稳定器。")
-        warnings.append(
+            notes.append("compatibility_mode 已开启：已强制 concat + concat_with_base，并关闭重型稳定器。")
+        notes.append(
             "兼容提醒：区域提示/Forge Couple/其它 cross-attn patch 节点可能覆盖或削弱本节点；"
             "若效果消失，先启用 compatibility_safe 预设或减少其它 attention patch 节点。"
         )
 
+        status = "CHECK" if warnings else "OK"
+        lines.insert(2, f"status: {status}")
         lines.append("")
         lines.append("warnings:")
         if warnings:
             lines.extend(f"  - {w}" for w in warnings)
         else:
             lines.append("  - no obvious configuration risk")
+        lines.append("")
+        lines.append("notes:")
+        if notes:
+            lines.extend(f"  - {n}" for n in notes)
+        else:
+            lines.append("  - none")
 
         report = "\n".join(lines)
         return {"ui": {"text": [report]}, "result": (report,)}
@@ -2785,6 +2929,7 @@ class AnimaArtistCrossAttn:
 
 
 NODE_CLASS_MAPPINGS = {
+    "AnimaArtistStarter": AnimaArtistStarter,
     "AnimaArtistChainBuilder": AnimaArtistChainBuilder,
     "AnimaArtistChainPreview": AnimaArtistChainPreview,
     "AnimaArtistPack": AnimaArtistPack,
@@ -2795,6 +2940,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "AnimaArtistStarter": "Anima Artist Starter",
     "AnimaArtistChainBuilder": "Anima Artist Chain Builder",
     "AnimaArtistChainPreview": "Anima Artist Chain Preview",
     "AnimaArtistPack": "Anima Artist Pack (Split + Encode)",

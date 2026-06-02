@@ -9,7 +9,7 @@ Anima uses an LLM as its text encoder. When multiple artist tags are stacked in 
 
 The bundled `AnimaArtistPack` node provides a one-shot experience: write your artist list (separated by commas or newlines) in one text box, your main prompt in another, and the node handles splitting, encoding, and packaging automatically.
 
-The current release adds one-click presets, UX helper nodes, an in-UI inspector, deterministic low-rank mixing, safer explicit weights, layered cross-seed stabilizers, CFG-style strength extrapolation, the linear injection-layer weight syntax `::name::weight`, per-artist layer/timing routing, and a compatibility-safe preset for workflows that also use regional or attention-patching nodes.
+The current release adds a starter workflow node, one-click presets, UX helper nodes, an in-UI inspector, deterministic low-rank mixing, safer explicit weights, layered cross-seed stabilizers, CFG-style strength extrapolation, the linear injection-layer weight syntax `::name::weight`, per-artist layer/timing routing, and a compatibility-safe preset for workflows that also use regional or attention-patching nodes.
 
 ## Quick links
 
@@ -47,12 +47,15 @@ Restart ComfyUI. No extra dependencies.
 
 (optional) AnimaArtistChainBuilder ──► artist_chain ──► AnimaArtistPack
 (optional) AnimaArtistChainPreview ──► syntax report before CLIP encoding
+(optional) AnimaArtistStarter ───────► artist_chain ──► AnimaArtistPack
+                                  └──► preset / advanced_options ──► AnimaArtistCrossAttn
 (optional) AnimaArtistPreset  ──► preset ────────────► AnimaArtistCrossAttn
 (optional) AnimaArtistOptions ──► advanced_options ──► AnimaArtistCrossAttn
 (optional) AnimaArtistInspector ◄── artist_pack / preset / advanced_options
 ```
 
 - Top text box of `AnimaArtistPack`: your artist chain (comma or newline separated)
+- Fastest first run: use `AnimaArtistStarter`, fill `artist_table`, then follow its in-UI guide
 - Use `AnimaArtistChainBuilder` when you do not want to hand-write `::weight`, `@layers`, and `%timing`
 - Builder's three visible rows are only shortcuts; use its `artist_table` field for larger chains
 - Use `AnimaArtistChainPreview` to validate a chain before paying the CLIP encoding cost
@@ -69,6 +72,12 @@ For full parameter explanations and recommended combinations, see [docs/USAGE.md
 For most users, start with:
 
 ```
+AnimaArtistStarter:
+recipe    = balanced
+layout    = layer_scheduled
+
+or:
+
 AnimaArtistPreset:
 preset    = balanced
 intensity = 1.0

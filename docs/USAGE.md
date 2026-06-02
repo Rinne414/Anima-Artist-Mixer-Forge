@@ -109,12 +109,15 @@ Restart ComfyUI. No extra dependencies.
 
 (optional) AnimaArtistChainBuilder ──► artist_chain ──► AnimaArtistPack
 (optional) AnimaArtistChainPreview ──► cleaned_chain / syntax report
+(optional) AnimaArtistStarter ───────► artist_chain ──► AnimaArtistPack
+                                  └──► preset / advanced_options ──► AnimaArtistCrossAttn
 (optional) AnimaArtistPreset  ──► preset ────────────► AnimaArtistCrossAttn
 (optional) AnimaArtistOptions ──► advanced_options ──► AnimaArtistCrossAttn
 (optional) AnimaArtistInspector ◄── artist_pack / preset / advanced_options
 ```
 
 Key points:
+- Fastest first run: use `AnimaArtistStarter`, fill `artist_table`, select a recipe, then follow its in-UI wiring guide
 - Use `AnimaArtistChainBuilder` for the fastest safe setup: enter a few artists in the shortcut rows or many artists in `artist_table`, pick a layout, then connect its `artist_chain` output into `AnimaArtistPack`
 - Use `AnimaArtistChainPreview` when hand-writing chains; it catches syntax mistakes before CLIP encoding
 - Write your artist chain in `AnimaArtistPack`'s top text box (comma or newline separated)
@@ -127,6 +130,49 @@ Key points:
 - Use `AnimaArtistInspector` to show the actual effective weights, block map, preset settings, and configuration warnings inside ComfyUI
 
 ## Parameters
+
+### AnimaArtistStarter (recommended first node)
+
+This is the lowest-friction entry point. It combines the common `ChainBuilder + Preset` setup into one helper node and outputs:
+
+- `artist_chain` for `AnimaArtistPack.artist_chain`
+- `preset` for `AnimaArtistCrossAttn.preset`
+- `advanced_options` for `AnimaArtistCrossAttn.advanced_options` when you want the explicit option payload
+- an in-UI `guide` with status, wiring steps, preset summary, chain preview, and warnings
+
+Use `artist_table` as one artist per line:
+
+```
+artist | weight | layers | timing
+@wlop | 1.2
+krenz | 0.8
+hiten
+```
+
+Only the artist column is required. Bad weights are not silently swallowed; the guide reports them and falls back to `1.0`.
+
+| Recipe | Best use |
+|---|---|
+| `balanced` | Default first run |
+| `strong_style` | Stronger visual style |
+| `stable_seed` | Same prompt across many seeds |
+| `fast_preview` | Fast exploration |
+| `identity_guard` | Preserve character/object identity |
+| `compatibility_safe` | Regional prompts, Forge Couple-style routing, attention masks, or other cross-attention patch nodes |
+
+Recommended start:
+
+```
+recipe = balanced
+layout = layer_scheduled
+```
+
+If a workflow already uses regional prompting or another attention patcher, start with:
+
+```
+recipe = compatibility_safe
+layout = layer_scheduled
+```
 
 ### AnimaArtistChainBuilder (UX helper)
 
@@ -238,7 +284,7 @@ Connect `artist_pack`, and optionally the same `preset` / `advanced_options` use
 - requested vs effective `normalize_weights`
 - effective linear weight sum
 - preset, fusion, combine, strength, layer filter, stabilizer settings
-- warnings for risky or mutually-incompatible combinations
+- `status`, warnings for risky or mutually-incompatible combinations, and non-blocking compatibility notes
 
 Use this node whenever results look wrong. It catches common mistakes faster than reading console logs.
 
@@ -401,7 +447,7 @@ Mutually exclusive with `artist_static_capture` (anchor takes priority, with a w
 
 ## Recommended combinations
 
-In v25, use `AnimaArtistPreset` first:
+In v25, use `AnimaArtistStarter` for new workflows, or `AnimaArtistPreset` when you only need the preset payload:
 
 | Goal | Preset |
 |---|---|
@@ -410,6 +456,7 @@ In v25, use `AnimaArtistPreset` first:
 | same prompt across many seeds | `stable_seed` |
 | fast exploration | `fast_preview` |
 | preserve character/object identity | `identity_guard` |
+| regional prompts / other attention patchers | `compatibility_safe` |
 
 Manual equivalents:
 

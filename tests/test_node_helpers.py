@@ -205,6 +205,65 @@ class ArtistRoutingHelpersTest(unittest.TestCase):
         self.assertIn("artists: 5", report)
         self.assertIn("e@22-27%0.72-1.00", chain)
 
+    def test_chain_builder_reports_invalid_table_weight(self):
+        rows, warnings = nodes._parse_builder_artist_table(
+            "wlop | not-a-number",
+            return_warnings=True,
+        )
+        chain, report = nodes._build_artist_chain_from_rows(
+            nodes.CHAIN_LAYOUT_MANUAL,
+            rows,
+            extra_warnings=warnings,
+        )
+
+        self.assertEqual(chain, "wlop")
+        self.assertIn("status: CHECK", report)
+        self.assertIn("invalid weight for wlop", report)
+
+    def test_chain_builder_reports_empty_artist_chain(self):
+        chain, report = nodes._build_artist_chain_from_rows(
+            nodes.CHAIN_LAYOUT_LAYER_SCHEDULED,
+            [],
+        )
+
+        self.assertEqual(chain, "")
+        self.assertIn("status: CHECK", report)
+        self.assertIn("no artists", report)
+
+    def test_starter_recipe_outputs_connectable_payloads(self):
+        result = nodes.AnimaArtistStarter().build(
+            nodes.PRESET_COMPATIBILITY_SAFE,
+            "a\nb\nc\nd",
+            nodes.CHAIN_LAYOUT_LAYER_SCHEDULED,
+            1.0,
+            normalize_weights=True,
+            layer_mode=nodes.LAYER_MODE_AUTO,
+            custom_layer_filter="",
+            num_blocks=28,
+        )
+        chain, preset, advanced_options, guide = result["result"]
+
+        self.assertEqual(len(chain.splitlines()), 4)
+        self.assertEqual(preset["preset"], nodes.PRESET_COMPATIBILITY_SAFE)
+        self.assertTrue(advanced_options["compatibility_mode"])
+        self.assertIn("artist_chain -> AnimaArtistPack.artist_chain", guide)
+        self.assertIn("status: OK", guide)
+
+    def test_inspector_has_ok_status_without_forced_warning(self):
+        pack = {
+            "labels": ["wlop"],
+            "weights": [1.0],
+            "layer_routes": [""],
+            "timing_routes": [""],
+            "has_explicit_weights": False,
+            "base_prompt": "portrait",
+        }
+        report = nodes.AnimaArtistInspector().inspect(pack)["result"][0]
+
+        self.assertIn("status: OK", report)
+        self.assertIn("warnings:\n  - no obvious configuration risk", report)
+        self.assertIn("notes:", report)
+
 
 if __name__ == "__main__":
     unittest.main()
