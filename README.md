@@ -9,11 +9,12 @@ Anima uses an LLM as its text encoder. When multiple artist tags are stacked in 
 
 The bundled `AnimaArtistPack` node provides a one-shot experience: write your artist list (separated by commas or newlines) in one text box, your main prompt in another, and the node handles splitting, encoding, and packaging automatically.
 
-The current release adds a starter workflow node, one-click presets, UX helper nodes, an in-UI inspector, deterministic low-rank mixing, safer explicit weights, layered cross-seed stabilizers, CFG-style strength extrapolation, the linear injection-layer weight syntax `::name::weight`, per-artist layer/timing routing, and a compatibility-safe preset for workflows that also use regional or attention-patching nodes.
+The current release (v26) adds negative artist weights (style subtraction), smoothstep timing fades (`%0.0-0.45~0.1`), the fast `embed_avg` combine mode, a per-layer style probe that measures where each artist actually lives in the model, shareable JSON recipes, VRAM controls (`max_batch_artists`, `low_vram_cache`), a CFG correctness fix for batch sizes > 1, and a full package restructure with tests and CI. Earlier releases added one-click presets, UX helper nodes, an in-UI inspector, deterministic low-rank mixing, layered cross-seed stabilizers, CFG-style strength extrapolation, the linear injection-layer weight syntax `::name::weight`, per-artist layer/timing routing, and a compatibility-safe preset. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Quick links
 
 - [Full documentation](docs/USAGE.md) — usage, parameters, modes, stabilizers, performance tips
+- [Changelog](CHANGELOG.md) — version history
 - [Issues](../../issues) — bug reports, feature requests
 - [Discussions](../../discussions) — usage questions, results sharing
 
@@ -51,7 +52,9 @@ Restart ComfyUI. No extra dependencies.
                                   └──► preset / advanced_options ──► AnimaArtistCrossAttn
 (optional) AnimaArtistPreset  ──► preset ────────────► AnimaArtistCrossAttn
 (optional) AnimaArtistOptions ──► advanced_options ──► AnimaArtistCrossAttn
-(optional) AnimaArtistInspector ◄── artist_pack / preset / advanced_options
+(optional) AnimaArtistInspector ◄── artist_pack / preset / advanced_options / MODEL
+(optional) AnimaArtistRecipeSave / RecipeLoad ──► share a full setup as JSON
+(optional) AnimaArtistProbe ──► MODEL ──► KSampler ──► ... ──► AnimaArtistProbeReport
 ```
 
 - Top text box of `AnimaArtistPack`: your artist chain (comma or newline separated)
@@ -95,14 +98,16 @@ artist_ema_alpha = 0.25
 To weight individual artists within the chain, use either of two syntaxes (they can coexist and stack):
 
 ```
-wlop, ::sakimichan::1.2, (krenz:0.7)
+wlop, ::sakimichan::1.2, (krenz:0.7), ::pixiv_style::-0.4
 ```
 
 - `(name:1.2)` — CLIP-side weighting (same as SD/A1111), non-linear, applied at text encoding
 - `::name::1.2` — injection-side weighting (v24+), linear and predictable, applied at cross-attention output
-- In v25, any valid `::weight` automatically disables normalization at runtime so explicit weights stay absolute
+- `::name::-0.4` — **negative weight (v26+)**: subtracts that artist's style direction instead of adding it (style subtraction); range is [-4, 4]
+- In v25+, any valid `::weight` automatically disables normalization at runtime so explicit weights stay absolute
 - Per-artist layer routing is supported with `@layers`: `wlop@0-8, krenz@9-18, hiten@19-27`
 - Per-artist sampling timing is supported with `%start-end`: `wlop@0-8%0.0-0.45, krenz@9-18%0.45-0.85`
+- Timing windows can fade in/out smoothly with `~fade` (v26+): `wlop%0.0-0.45~0.1` ramps the artist's weight with a smoothstep over a 0.1-progress-wide edge instead of switching on/off abruptly
 - Anima artist tags that start with `@` are safe: `@wlop` remains the artist name; only a final numeric suffix like `@0-8` is treated as layer routing
 
 ## Compatibility notes
@@ -144,12 +149,31 @@ Generation time scales with artist count. Per the math of `output_avg`, each lay
 | 8 artists | ~1.7x |
 | 5 artists + `artist_static_capture` (K=6) | ~1.1x |
 | 5 artists + `artist_anchor_q` (cached) | ~1.05x |
+| any artist count + `combine_mode = embed_avg` | ~1.05x |
 
-**Strongly recommended**: connect `AnimaArtistOptions` and limit either the layer range (`start_block / end_block`) or the sampling-step range (`start_percent / end_percent`). Both can dramatically reduce generation time with minimal quality loss, and stack with the cache-based stabilizers above. See the docs for details.
+**Strongly recommended**: connect `AnimaArtistOptions` and limit either the layer range (`start_block / end_block`) or the sampling-step range (`start_percent / end_percent`). Both can dramatically reduce generation time with minimal quality loss, and stack with the cache-based stabilizers above. With many artists at high resolution, set `max_batch_artists` (2-8) to bound peak VRAM and `low_vram_cache` to keep stabilizer caches in system RAM. See the docs for details.
+
+## Measuring where styles live (v26)
+
+Instead of guessing `@layers` routes, wire `AnimaArtistProbe` between your model loader and the sampler, run one generation, and read `AnimaArtistProbeReport` (connect any post-sampler output as its trigger). The report shows each artist's per-layer style influence (`||artist_out − base_out|| / ||base_out||`) as a bar chart and suggests a concrete `artist@lo-hi` route per artist. The probe pass does not alter the generated image.
+
+## Sharing recipes (v26)
+
+`AnimaArtistRecipeSave` packs the artist chain plus the full effective configuration (combine/fusion/strength/advanced options) into one JSON string; `AnimaArtistRecipeLoad` turns it back into `artist_chain` + a `preset` payload you can wire straight into `AnimaArtistCrossAttn`. Paste-friendly for sharing exact mixes with other users.
 
 ## Important caveat
 
 This node **cannot achieve the near-lossless artist mixing that SDXL does**. Anima's text encoder is non-linear, so any mixing strategy introduces some distortion. What this node does is make that distortion controllable. Style-similar artists mix well; style-divergent artists may "regress to the mean" into a compromise look — `lowrank_avg` accepts more of this regression in exchange for cross-seed stability.
+
+## Development
+
+The implementation lives in the `anima_mixer/` package (`nodes.py` is a compatibility shim). Run the test suite with:
+
+```
+python -m unittest discover -s tests -v
+```
+
+CI (ruff + unittest on Python 3.10/3.12) runs on every push and PR.
 
 ## Acknowledgements
 

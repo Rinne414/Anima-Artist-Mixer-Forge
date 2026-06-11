@@ -12,6 +12,8 @@ v25.1 also adds per-artist layer routing, matching the original repository's fir
 
 v25.2 adds per-artist sampling timing, a `compatibility_safe` preset, Inspector block maps, runtime warnings for suspicious cross-attention / model-wrapper conflicts, and UX helper nodes for building or previewing artist chains before CLIP encoding.
 
+v26 adds negative artist weights (style subtraction, `::name::-0.5`), smoothstep timing fades (`%start-end~fade`), the fast `embed_avg` combine mode, VRAM controls (`max_batch_artists`, `low_vram_cache`), shareable JSON recipes (`AnimaArtistRecipeSave/Load`), a per-layer style probe (`AnimaArtistProbe` + `AnimaArtistProbeReport`), a CFG correctness fix for batch sizes > 1, and a package restructure with a real test suite and CI. See [CHANGELOG.md](../CHANGELOG.md).
+
 ## What problem it solves
 
 Anima uses an LLM as its text encoder (unlike SDXL's CLIP). LLM encoders are heavily **contextualized** — every token's embedding fuses semantics from surrounding tokens. This has a direct consequence:
@@ -307,6 +309,28 @@ Not connecting this node = default behavior. Connecting it makes its settings ta
 | `anchor_user_blend` | Blend ratio between anchor Q and user Q. 0 = pure anchor, 1 = pure user |
 | `anchor_deep_layer_threshold` | Use anchor for shallow layers `[0, N)`, user Q for deep layers `[N, end]`. -1 disables |
 | `compatibility_mode` | Forces `concat + concat_with_base`, disables EMA/static/anchor stabilizers, and reduces conflict risk with regional/attention-patching nodes |
+| `max_batch_artists` (v26) | Caps how many artists share one batched cross-attention forward. `0` = no cap. Set `2-8` to bound peak VRAM with many artists at high resolution instead of falling back to slow sequential mode |
+| `low_vram_cache` (v26) | Stores static-capture and anchor caches in system RAM instead of VRAM. Saves hundreds of MB at high resolution for a small per-step transfer cost |
+
+### AnimaArtistRecipeSave / AnimaArtistRecipeLoad (v26, sharing)
+
+`AnimaArtistRecipeSave` merges the effective configuration (UI values + optional preset + optional advanced options) and packs it together with the artist chain into one JSON string. `AnimaArtistRecipeLoad` parses that JSON back into:
+
+- `artist_chain` → wire to `AnimaArtistPack.artist_chain`
+- `preset` (carries combine/fusion/strength/options) → wire to `AnimaArtistCrossAttn.preset`
+- `advanced_options` → optional explicit payload
+
+Unknown fields are ignored with warnings, so recipes stay loadable across versions. The JSON is paste-friendly — share exact mixes in a Discord message.
+
+### AnimaArtistProbe + AnimaArtistProbeReport (v26, measurement)
+
+Stop guessing `@layers` routes — measure them:
+
+1. Wire your model through `AnimaArtistProbe` (instead of `AnimaArtistCrossAttn`) together with the same `artist_pack`.
+2. Run one generation. The probe does **not** alter the image: every layer records `||artist_out − base_out|| / ||base_out||` per artist over the first `probe_steps` steps while the image generates from the base prompt only.
+3. Wire `probe_id` into `AnimaArtistProbeReport` and connect any post-sampler output (e.g. the decoded IMAGE) to its `trigger` so it runs after sampling.
+
+The report shows a per-layer bar chart per artist and suggests a concrete `artist@lo-hi` route. Artists with sharp peaks benefit most from layer routing; flat profiles mix well everywhere.
 
 ## Core concepts
 
@@ -347,6 +371,17 @@ artist_total = base_out + sum_i (w_i * D_lowrank[i])
 ```
 
 Why it stabilizes cross-seed: the seed-flipping "dominant artist" effect is largely high-rank noise in `D`. Truncating to top-k strips that noise. `k=1` (the default) projects all artists onto a single shared direction, giving maximum stability at the cost of artists looking more homogeneous. `k=2` or `3` keeps small per-artist differentiation. `k >= N` is mathematically equivalent to `output_avg` (no projection).
+
+#### `embed_avg` (v26, fastest)
+
+Mixes **before** attention, in LLMAdapter output space: the artist embeddings are weighted-averaged into a single pseudo-conditioning, then one cross-attention forward runs against it:
+
+```
+E_mix = sum_i (w_i * E_i)
+out = cross_attn(x, E_mix)
+```
+
+Cost is one extra forward per layer regardless of artist count — the cheapest multi-artist mode (~1.05x of a single artist). The trade-off: averaging in embedding space happens before attention picks tokens, so style-divergent artists blur together more than under `output_avg`. Good for fast exploration and weight hunting; switch to `output_avg` or `lowrank_avg` for final renders. Works with all fusion modes and with per-artist layer/timing routing; if artist embeddings disagree in shape it silently falls back to `output_avg`.
 
 > Earlier versions had `mean` and `weighted_sum` modes (per-position weighted average over LLMAdapter outputs). They were removed: position-i in different artists carries different semantics, so element-wise averaging causes K/V semantic misalignment and inevitably produces broken images. A `replace` mode was also removed: it discards the main prompt's role in cross-attention entirely, severely degrading prompt adherence.
 
@@ -567,6 +602,21 @@ They can be **stacked**: `::(wlop:1.1)::0.8` applies CLIP weight 1.1 first, then
 
 When any artist uses `::weight` syntax, `normalize_weights` is automatically bypassed at runtime (the explicit weights are honored as-is).
 
+#### Negative weights: style subtraction (v26)
+
+Injection weights accept negative values in `[-4, 0)`:
+
+```
+wlop, ::pixiv_generic::-0.4
+```
+
+A negative-weight artist's attention output is subtracted from the mix instead of added, pushing the result **away** from that style direction. Practical uses:
+
+- de-bias a strong default look: mix your target artists positively and subtract a generic style tag lightly (`-0.2 ~ -0.5`)
+- sharpen contrast between two artists by subtracting a third that sits "between" them
+
+Notes: keep at least one positive artist in the chain; subtraction magnitudes above ~1.0 destabilize quickly; under `combine_mode = concat` negative weights scale raw conditioning tokens, which is much less meaningful — use `output_avg` or `lowrank_avg` for subtraction work. The Inspector and Chain Preview flag negative weights so you can confirm intent.
+
 Global artist contribution is controlled by `AnimaArtistCrossAttn`'s `strength` (independent of per-artist weights).
 
 ### Per-artist layer routing
@@ -626,6 +676,17 @@ The timing range is normalized sampling progress:
 This enables scheduled artist roles from one artist chain: one artist can shape early composition, another can dominate the middle structure, and another can add late brushwork. If the current layer and current sampling progress have no matching artist, that layer falls back to original cross-attention for that step.
 
 Per-artist timing is independent from global `start_percent / end_percent`. Global timing still applies first; per-artist timing decides which artists participate inside the globally active window.
+
+### Timing fade (v26)
+
+A hard timing window switches an artist on/off between two adjacent steps, which can produce a visible style "pop". Append `~fade` to ramp the artist's weight smoothly (smoothstep) over a progress-wide edge on both sides of the window:
+
+```
+wlop%0.0-0.45~0.1
+::krenz::1.2@9-18%0.35-0.85~0.08
+```
+
+`wlop%0.0-0.45~0.1` means: weight ramps 0→1 over progress `0.0-0.1`, stays at full weight until `0.35`, then ramps 1→0 over `0.35-0.45`. The fade is clamped to at most half the window. With `normalize_weights` on, a fading artist's share is smoothly redistributed to the other active artists — exactly the crossfade you want for scheduled chains. `~0` (or omitting `~fade`) reproduces the old hard-switch behavior.
 
 ### Important note on heavy weights
 
