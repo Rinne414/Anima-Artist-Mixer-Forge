@@ -37,48 +37,11 @@ Restart ComfyUI. No extra dependencies.
 ## Quick start
 ![workflow](docs/images/workflow.png)
 
-Open [`workflow/anima_artist_basic_example.json`](workflow/anima_artist_basic_example.json)
-for the smallest recommended setup. It uses `AnimaArtistBasic` with
-`preset = drift_auto`, so new workflows do not need to wire the advanced
-`AnimaArtistOptions` panel first.
+Open [`workflow/Shift testing.before-basic-simplify.json`](<workflow/Shift testing.before-basic-simplify.json>)
+for a complete importable example. It keeps the real generation/output chain
+and shows the recommended `AnimaArtistPreset(preset = drift_auto)` wiring
+without requiring users to build the workflow from scratch.
 
-### Basic workflow
-
-```
-[Load Anima Model] ──► MODEL ──┐
-                               ├──► AnimaArtistBasic ──► MODEL ──► KSampler
-[Load CLIP] ────────► CLIP ────┘             │                       │
-                                             └──► base_prompt ───────► (positive)
-
-[Load CLIP] ──► CLIPTextEncode (Negative) ───────────────────────────► (negative)
-```
-
-Use `AnimaArtistBasic` unless you specifically need advanced layer, timing,
-compatibility, VRAM, or stabilizer controls.
-
-### Advanced workflow
-
-```
-                          ┌──► artist_pack ──► AnimaArtistCrossAttn ──► MODEL ──► KSampler
-[Load CLIP] ─► CLIP ──────┤                              │                          │
-                          │                              └──► base_prompt ──► (positive)
-                          │
-                          └──► CLIPTextEncode (Negative) ──► (negative)
-
-[Load Anima Model] ──► MODEL ──► AnimaArtistCrossAttn
-
-(optional) AnimaArtistChainBuilder ──► artist_chain ──► AnimaArtistPack
-(optional) AnimaArtistChainPreview ──► syntax report before CLIP encoding
-(optional) AnimaArtistStarter ───────► artist_chain ──► AnimaArtistPack
-                                  └──► preset / advanced_options ──► AnimaArtistCrossAttn
-(optional) AnimaArtistPreset  ──► preset ────────────► AnimaArtistCrossAttn
-(optional) AnimaArtistOptions ──► advanced_options ──► AnimaArtistCrossAttn
-(optional) AnimaArtistInspector ◄── artist_pack / preset / advanced_options / MODEL
-(optional) AnimaArtistRecipeSave / RecipeLoad ──► share a full setup as JSON
-(optional) AnimaArtistProbe ──► MODEL ──► KSampler ──► ... ──► AnimaArtistProbeReport
-```
-
-- Easiest first run: use `AnimaArtistBasic`, keep `preset = drift_auto`, and edit only `artist_chain` / `base_prompt`
 - Top text box of `AnimaArtistPack`: your artist chain (comma or newline separated)
 - Fastest first run: use `AnimaArtistStarter`, fill `artist_table`, then follow its in-UI guide
 - Use `AnimaArtistChainBuilder` when you do not want to hand-write `::weight`, `@layers`, and `%timing`

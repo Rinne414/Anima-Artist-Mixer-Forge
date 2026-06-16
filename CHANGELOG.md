@@ -5,8 +5,9 @@
 ### 2026-06-16 workflow simplification
 - Added `AnimaArtistBasic`, a minimal recommended entry point that wraps
   `Pack + Preset + CrossAttn` with `preset = drift_auto` by default.
-- Added a clean example workflow at `workflow/anima_artist_basic_example.json`
-  and documented it in README / USAGE as the default path for new users.
+- Added a complete example workflow at
+  `workflow/Shift testing.before-basic-simplify.json` and documented it in
+  README / USAGE as a direct importable example.
 - Kept `AnimaArtistOptions` as an advanced/debug node instead of removing it.
 
 ### Restructure
