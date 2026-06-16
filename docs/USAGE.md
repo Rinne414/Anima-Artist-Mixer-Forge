@@ -120,8 +120,43 @@ Restart ComfyUI. No extra dependencies.
 (optional) AnimaArtistInspector ◄── artist_pack / preset / advanced_options
 ```
 
+Basic workflow:
+
+```
+[Load Anima Model] ──► MODEL ──┐
+                               ├──► AnimaArtistBasic ──► MODEL ──► KSampler
+[Load CLIP] ────────► CLIP ────┘             │                       │
+                                             └──► base_prompt ───────► (positive)
+
+[Load CLIP] ──► CLIPTextEncode (Negative) ───────────────────────────► (negative)
+```
+
+Open [`../workflow/anima_artist_basic_example.json`](../workflow/anima_artist_basic_example.json)
+for a minimal importable example.
+
+Advanced workflow:
+
+```
+                          ┌──► artist_pack ──► AnimaArtistCrossAttn ──► MODEL ──► KSampler
+[Load CLIP] ─► CLIP ──────┤                              │                          │
+                          │                              └──► base_prompt ──► (positive)
+                          │
+                          └──► CLIPTextEncode (Negative) ──► (negative)
+
+[Load Anima Model] ──► MODEL ──► AnimaArtistCrossAttn
+
+(optional) AnimaArtistChainBuilder ──► artist_chain ──► AnimaArtistPack
+(optional) AnimaArtistChainPreview ──► cleaned_chain / syntax report
+(optional) AnimaArtistStarter ───────► artist_chain ──► AnimaArtistPack
+                                  └──► preset / advanced_options ──► AnimaArtistCrossAttn
+(optional) AnimaArtistPreset  ──► preset ────────────► AnimaArtistCrossAttn
+(optional) AnimaArtistOptions ──► advanced_options ──► AnimaArtistCrossAttn
+(optional) AnimaArtistInspector ◄── artist_pack / preset / advanced_options
+```
+
 Key points:
-- Fastest first run: use `AnimaArtistStarter`, fill `artist_table`, select a recipe, then follow its in-UI wiring guide
+- Easiest first run: use `AnimaArtistBasic`, keep `preset=drift_auto`, and edit only `artist_chain` / `base_prompt`
+- Fastest guided builder: use `AnimaArtistStarter`, fill `artist_table`, select a recipe, then follow its in-UI wiring guide
 - Use `AnimaArtistChainBuilder` for the fastest safe setup: enter a few artists in the shortcut rows or many artists in `artist_table`, pick a layout, then connect its `artist_chain` output into `AnimaArtistPack`
 - Use `AnimaArtistChainPreview` when hand-writing chains; it catches syntax mistakes before CLIP encoding
 - Write your artist chain in `AnimaArtistPack`'s top text box (comma or newline separated)

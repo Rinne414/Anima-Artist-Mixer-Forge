@@ -2,6 +2,13 @@
 
 ## v26.0.0 (2026-06-11)
 
+### 2026-06-16 workflow simplification
+- Added `AnimaArtistBasic`, a minimal recommended entry point that wraps
+  `Pack + Preset + CrossAttn` with `preset = drift_auto` by default.
+- Added a clean example workflow at `workflow/anima_artist_basic_example.json`
+  and documented it in README / USAGE as the default path for new users.
+- Kept `AnimaArtistOptions` as an advanced/debug node instead of removing it.
+
 ### Restructure
 - Split the 2,600-line `nodes.py` into the `anima_mixer` package
   (`constants`, `parsing`, `math_utils`, `options`, `chain_tools`,

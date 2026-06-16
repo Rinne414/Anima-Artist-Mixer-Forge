@@ -37,6 +37,27 @@ Restart ComfyUI. No extra dependencies.
 ## Quick start
 ![workflow](docs/images/workflow.png)
 
+Open [`workflow/anima_artist_basic_example.json`](workflow/anima_artist_basic_example.json)
+for the smallest recommended setup. It uses `AnimaArtistBasic` with
+`preset = drift_auto`, so new workflows do not need to wire the advanced
+`AnimaArtistOptions` panel first.
+
+### Basic workflow
+
+```
+[Load Anima Model] ──► MODEL ──┐
+                               ├──► AnimaArtistBasic ──► MODEL ──► KSampler
+[Load CLIP] ────────► CLIP ────┘             │                       │
+                                             └──► base_prompt ───────► (positive)
+
+[Load CLIP] ──► CLIPTextEncode (Negative) ───────────────────────────► (negative)
+```
+
+Use `AnimaArtistBasic` unless you specifically need advanced layer, timing,
+compatibility, VRAM, or stabilizer controls.
+
+### Advanced workflow
+
 ```
                           ┌──► artist_pack ──► AnimaArtistCrossAttn ──► MODEL ──► KSampler
 [Load CLIP] ─► CLIP ──────┤                              │                          │
@@ -57,6 +78,7 @@ Restart ComfyUI. No extra dependencies.
 (optional) AnimaArtistProbe ──► MODEL ──► KSampler ──► ... ──► AnimaArtistProbeReport
 ```
 
+- Easiest first run: use `AnimaArtistBasic`, keep `preset = drift_auto`, and edit only `artist_chain` / `base_prompt`
 - Top text box of `AnimaArtistPack`: your artist chain (comma or newline separated)
 - Fastest first run: use `AnimaArtistStarter`, fill `artist_table`, then follow its in-UI guide
 - Use `AnimaArtistChainBuilder` when you do not want to hand-write `::weight`, `@layers`, and `%timing`
