@@ -8,10 +8,23 @@ import torch.nn as nn
 from .constants import (
     COMBINE_LOWRANK_AVG,
     COMBINE_OUTPUT_AVG,
+    CONTRIB_BALANCE_MAX_SCALE,
+    CONTRIB_BALANCE_MIN_SCALE,
     FUSION_BASE_PRESERVE,
     FUSION_CONCAT_WITH_BASE,
     FUSION_INTERPOLATE,
+    NORM_LOCK_ROW,
+    NORM_LOCK_SCOPE_BOTH,
+    NORM_LOCK_SCOPE_MIXED,
+    NORM_LOCK_SCOPE_PER_ARTIST,
+    NORM_LOCK_TOKEN,
+    MIXED_DELTA_CAP_RATIO_DEFAULT,
+    STATIC_CAPTURE_BLEND_ALPHA_DEFAULT,
     STATIC_CAPTURE_K_DEFAULT,
+    STATIC_CAPTURE_MODE_BLEND,
+    STATIC_CAPTURE_MODE_BLEND_PERP,
+    STATIC_CAPTURE_MODE_DELTA,
+    STATIC_CAPTURE_MODE_OUTPUT,
     ANCHOR_LAYER_THRESHOLD_DISABLED,
 )
 from .math_utils import (
@@ -39,6 +52,72 @@ def _cache_store(tensor, low_vram):
 def _cache_load(tensor, like):
     """Bring a cached tensor back to the compute device/dtype of ``like``."""
     return tensor.to(device=like.device, dtype=like.dtype)
+
+
+def _resolve_norm_lock_mode(mode):
+    mode = str(mode or NORM_LOCK_TOKEN).strip().lower()
+    if mode == NORM_LOCK_ROW:
+        return NORM_LOCK_ROW
+    return NORM_LOCK_TOKEN
+
+
+def _resolve_norm_lock_scope(scope):
+    scope = str(scope or NORM_LOCK_SCOPE_PER_ARTIST).strip().lower()
+    if scope in (NORM_LOCK_SCOPE_MIXED, NORM_LOCK_SCOPE_PER_ARTIST, NORM_LOCK_SCOPE_BOTH):
+        return scope
+    return NORM_LOCK_SCOPE_PER_ARTIST
+
+
+def _resolve_static_capture_mode(mode):
+    mode = str(mode or STATIC_CAPTURE_MODE_OUTPUT).strip().lower()
+    if mode in (
+        STATIC_CAPTURE_MODE_DELTA,
+        STATIC_CAPTURE_MODE_BLEND,
+        STATIC_CAPTURE_MODE_BLEND_PERP,
+    ):
+        return mode
+    return STATIC_CAPTURE_MODE_OUTPUT
+
+
+def _static_capture_blend_alpha(st):
+    try:
+        alpha = float(st.get("static_capture_blend_alpha", STATIC_CAPTURE_BLEND_ALPHA_DEFAULT))
+    except (TypeError, ValueError):
+        alpha = STATIC_CAPTURE_BLEND_ALPHA_DEFAULT
+    return max(0.0, min(1.0, alpha))
+
+
+def _static_capture_to_outputs(mode, cached, base_out, alpha):
+    if mode == STATIC_CAPTURE_MODE_DELTA:
+        return [base_out + delta for delta in cached]
+    if mode == STATIC_CAPTURE_MODE_BLEND:
+        return [
+            (1.0 - alpha) * pair[0] + alpha * (base_out + pair[1])
+            for pair in cached
+        ]
+    if mode == STATIC_CAPTURE_MODE_BLEND_PERP:
+        outs = []
+        for pair in cached:
+            frozen_out = pair[0]
+            frozen_delta = pair[1]
+            base_motion = base_out + frozen_delta - frozen_out
+            motion_perp = project_perpendicular(base_motion, frozen_delta)
+            outs.append(frozen_out + alpha * motion_perp)
+        return outs
+    return cached
+
+
+def _static_capture_values_to_cache(mode, outs, base_out):
+    if mode == STATIC_CAPTURE_MODE_DELTA:
+        base_f32 = base_out.to(torch.float32)
+        return [out.to(torch.float32) - base_f32 for out in outs]
+    if mode in (STATIC_CAPTURE_MODE_BLEND, STATIC_CAPTURE_MODE_BLEND_PERP):
+        base_f32 = base_out.to(torch.float32)
+        return [
+            torch.stack([out.to(torch.float32), out.to(torch.float32) - base_f32], dim=0)
+            for out in outs
+        ]
+    return outs
 
 
 class CrossAttnWrapper(nn.Module):
@@ -101,7 +180,7 @@ class CrossAttnWrapper(nn.Module):
             st["_static_max_sigma"] = cur
 
     def _get_artist_outputs_with_cache(self, x, context, rope_emb, t_opts,
-                                       individuals, fusion_mode):
+                                       individuals, fusion_mode, base_out=None):
         """H' temporal averaging: accumulate the first K steps, then freeze.
 
         Accumulation runs in fp32; returned tensors keep the model dtype.
@@ -122,11 +201,19 @@ class CrossAttnWrapper(nn.Module):
             return self._collect_artist_outputs(
                 x, context, rope_emb, t_opts, individuals, fusion_mode
             )
+        mode = _resolve_static_capture_mode(st.get("static_capture_mode"))
+        if mode in (
+            STATIC_CAPTURE_MODE_DELTA,
+            STATIC_CAPTURE_MODE_BLEND,
+            STATIC_CAPTURE_MODE_BLEND_PERP,
+        ) and base_out is None:
+            mode = STATIC_CAPTURE_MODE_OUTPUT
+        blend_alpha = _static_capture_blend_alpha(st)
 
         self._maybe_reset_static()
         cache = st.setdefault("_static_cache", {})
         n = len(individuals)
-        fp = (tuple(x.shape), n)
+        fp = (tuple(x.shape), n, mode)
 
         cur_sigma = st.get("current_sigma")
         sigma_key = round(float(cur_sigma), 4) if cur_sigma is not None else None
@@ -144,16 +231,18 @@ class CrossAttnWrapper(nn.Module):
             cache[self._idx] = entry
 
         if entry["frozen"]:
-            return [_cache_load(o, context) for o in entry["frozen_outputs"]]
+            frozen = [_cache_load(o, context) for o in entry["frozen_outputs"]]
+            return _static_capture_to_outputs(mode, frozen, base_out, blend_alpha)
 
         # Same sigma re-entry (CFG second forward): return the current
         # average without recomputing or re-accumulating.
         if sigma_key is not None and sigma_key in entry["seen_sigmas"]:
             if entry["accumulator"] is not None and entry["count"] > 0:
                 inv = 1.0 / entry["count"]
-                return [
+                averaged = [
                     _cache_load(a * inv, context) for a in entry["accumulator"]
                 ]
+                return _static_capture_to_outputs(mode, averaged, base_out, blend_alpha)
             return self._collect_artist_outputs(
                 x, context, rope_emb, t_opts, individuals, fusion_mode
             )
@@ -161,12 +250,13 @@ class CrossAttnWrapper(nn.Module):
         outs = self._collect_artist_outputs(
             x, context, rope_emb, t_opts, individuals, fusion_mode
         )
+        to_cache = _static_capture_values_to_cache(mode, outs, base_out)
         if entry["accumulator"] is None:
             entry["accumulator"] = [
-                _cache_store(o.to(torch.float32), low_vram) for o in outs
+                _cache_store(o.to(torch.float32), low_vram) for o in to_cache
             ]
         else:
-            for i, o in enumerate(outs):
+            for i, o in enumerate(to_cache):
                 acc = entry["accumulator"][i]
                 add = _cache_store(o.to(torch.float32), low_vram)
                 entry["accumulator"][i] = acc + add
@@ -186,10 +276,12 @@ class CrossAttnWrapper(nn.Module):
             entry["frozen"] = True
             entry["accumulator"] = None  # release memory
             entry["seen_sigmas"] = None
-            return [_cache_load(o, context) for o in entry["frozen_outputs"]]
+            frozen = [_cache_load(o, context) for o in entry["frozen_outputs"]]
+            return _static_capture_to_outputs(mode, frozen, base_out, blend_alpha)
 
         inv = 1.0 / entry["count"]
-        return [_cache_load(a * inv, context) for a in entry["accumulator"]]
+        averaged = [_cache_load(a * inv, context) for a in entry["accumulator"]]
+        return _static_capture_to_outputs(mode, averaged, base_out, blend_alpha)
 
     # ----------------------------------------------------------------- fusion
 
@@ -214,28 +306,166 @@ class CrossAttnWrapper(nn.Module):
                 out[i] = base_out[i] * (1.0 - strength) + artist_total[i] * strength
         return out
 
-    def _match_base_norm(self, artist_total, base_out, mask):
+    def _match_base_norm(self, artist_total, base_out, mask, scale_floor=0.5):
         """Rescale the mixed artist output to the base output's RMS energy.
 
-        The weighted artist mixture can carry noticeably different
-        activation energy than the base output downstream blocks were
-        trained on; the deviation compounds across layers and surfaces as
-        seed-dependent style-strength swings (style drift). Per-row RMS
-        matching keeps the artist direction (the style) while restoring
-        on-distribution magnitude. The scale is clamped to [0.5, 2.0] so
-        pathological mismatches degrade gracefully instead of
-        overcorrecting. Rows outside the injection mask keep scale 1.
+        The weighted artist mixture can carry noticeably different activation
+        energy than the base output downstream blocks were trained on; the
+        deviation compounds across layers and surfaces as seed-dependent
+        style-strength swings. Token mode matches each image token's RMS;
+        row mode preserves the legacy whole-row RMS behavior. Rows outside
+        the injection mask keep scale 1.
         """
-        dims = tuple(range(1, artist_total.dim()))
-        base_rms = base_out.detach().to(torch.float32).pow(2).mean(
+        norm_ref = self._get_anchor_base_norm_ref(base_out)
+        mode = _resolve_norm_lock_mode(self._st.get("norm_lock_mode", NORM_LOCK_TOKEN))
+        if mode == NORM_LOCK_ROW or artist_total.dim() < 3:
+            dims = tuple(range(1, artist_total.dim()))
+        else:
+            dims = (-1,)
+        base_rms = norm_ref.detach().to(torch.float32).pow(2).mean(
             dim=dims, keepdim=True).sqrt()
         artist_rms = artist_total.detach().to(torch.float32).pow(2).mean(
             dim=dims, keepdim=True).sqrt()
-        scale = (base_rms / artist_rms.clamp(min=1e-6)).clamp(0.5, 2.0)
+        scale = (base_rms / artist_rms.clamp(min=1e-6)).clamp(scale_floor, 2.0)
         for i, hit in enumerate(mask):
             if not hit:
                 scale[i] = 1.0
         return artist_total * scale.to(artist_total.dtype)
+
+    def _get_anchor_base_norm_ref(self, base_out):
+        st = self._st
+        if not st.get("anchor_base_norm_ref", False):
+            return base_out
+        if st.get("_anchor_failed", False):
+            return base_out
+        cache = st.get("_anchor_base_cache", {})
+        anchor_base = cache.get(self._idx)
+        if anchor_base is None:
+            return base_out
+        if anchor_base.shape != base_out.shape:
+            if anchor_base.shape[1:] == base_out.shape[1:]:
+                ax_bsz = anchor_base.shape[0]
+                bsz = base_out.shape[0]
+                if bsz % ax_bsz == 0:
+                    anchor_base = anchor_base.repeat(
+                        bsz // ax_bsz, *([1] * (anchor_base.dim() - 1))
+                    )
+                elif ax_bsz % bsz == 0:
+                    anchor_base = anchor_base[:bsz]
+                else:
+                    return base_out
+            else:
+                return base_out
+        return anchor_base.to(device=base_out.device, dtype=base_out.dtype)
+
+    def _contribution_balance_alpha(self):
+        if not self._st.get("contribution_balance", False):
+            return 0.0
+        try:
+            alpha = float(self._st.get("contribution_balance_alpha", 1.0))
+        except (TypeError, ValueError):
+            return 1.0
+        return max(0.0, min(1.0, alpha))
+
+    def _balance_artist_deltas(self, artist_outs, base_out, weights, mask):
+        """Scale per-artist deltas toward a common target strength.
+
+        Artist dominance flips happen when one seed makes a single artist's
+        cross-attention delta much larger than the others. This controller
+        measures each active artist's delta magnitude and nudges it toward
+        the shared baseline implied by the group, so the user weights stay
+        responsible for the final proportions instead of getting squared.
+        """
+        alpha = self._contribution_balance_alpha()
+        if alpha <= 0.0 or len(artist_outs) < 2 or base_out is None:
+            return artist_outs
+        pos = [abs(float(w)) for w in weights]
+        total_w = sum(pos)
+        if total_w <= 1e-8:
+            return artist_outs
+
+        deltas = [(out - base_out).to(torch.float32) for out in artist_outs]
+        dims = (-1,) if base_out.dim() >= 3 else tuple(range(1, base_out.dim()))
+        strengths = [
+            d.detach().pow(2).mean(dim=dims, keepdim=True).sqrt()
+            for d in deltas
+        ]
+        active_strengths = []
+        for s, w in zip(strengths, pos):
+            if w <= 1e-8:
+                continue
+            active_strengths.append(s)
+        if not active_strengths:
+            return artist_outs
+        total_strength = active_strengths[0].clone()
+        for s in active_strengths[1:]:
+            total_strength = total_strength + s
+        target_strength = total_strength / float(len(active_strengths))
+
+        balanced = []
+        for out, delta, strength, w in zip(
+            artist_outs, deltas, strengths, pos,
+        ):
+            if w <= 1e-8:
+                balanced.append(out)
+                continue
+            scale = (target_strength / strength.clamp(min=1e-6)).clamp(
+                CONTRIB_BALANCE_MIN_SCALE, CONTRIB_BALANCE_MAX_SCALE,
+            )
+            if alpha < 1.0:
+                scale = 1.0 + alpha * (scale - 1.0)
+            for i, hit in enumerate(mask):
+                if not hit:
+                    scale[i] = 1.0
+            adjusted = base_out + delta.to(out.dtype) * scale.to(out.dtype)
+            balanced.append(adjusted)
+        return balanced
+
+    def _mixed_delta_cap_ratio(self):
+        if not self._st.get("mixed_delta_cap", False):
+            return 0.0
+        try:
+            ratio = float(self._st.get(
+                "mixed_delta_cap_ratio", MIXED_DELTA_CAP_RATIO_DEFAULT,
+            ))
+        except (TypeError, ValueError):
+            ratio = MIXED_DELTA_CAP_RATIO_DEFAULT
+        return max(0.0, ratio)
+
+    def _cap_mixed_delta(self, artist_total, base_out, mask, fusion_mode, strength):
+        """Limit the effective mixed artist delta before final fusion."""
+        ratio = self._mixed_delta_cap_ratio()
+        if (
+            ratio <= 0.0
+            or base_out is None
+            or fusion_mode not in (FUSION_INTERPOLATE, FUSION_BASE_PRESERVE)
+        ):
+            return artist_total
+
+        delta = (artist_total - base_out).to(torch.float32)
+        if fusion_mode == FUSION_BASE_PRESERVE:
+            effective_delta = project_perpendicular(delta, base_out.to(torch.float32))
+        else:
+            effective_delta = delta
+
+        final_strength = max(abs(float(strength)), 1e-6)
+        dims = (-1,) if artist_total.dim() >= 3 else tuple(range(1, artist_total.dim()))
+        base_rms = base_out.detach().to(torch.float32).pow(2).mean(
+            dim=dims, keepdim=True,
+        ).sqrt()
+        delta_rms = effective_delta.detach().pow(2).mean(
+            dim=dims, keepdim=True,
+        ).sqrt()
+        max_delta_rms = base_rms * float(ratio) / final_strength
+        scale = torch.minimum(
+            torch.ones_like(delta_rms),
+            max_delta_rms / delta_rms.clamp(min=1e-6),
+        )
+        for i, hit in enumerate(mask):
+            if not hit:
+                scale[i] = 1.0
+        capped = base_out.to(torch.float32) + delta * scale
+        return capped.to(artist_total.dtype)
 
     # ---------------------------------------------------------------- forward
 
@@ -250,8 +480,14 @@ class CrossAttnWrapper(nn.Module):
             cache[self._idx] = _cache_store(
                 x.clone(), bool(st.get("low_vram_cache", False))
             )
-            return self.original(x, context, rope_emb=rope_emb,
-                                 transformer_options=transformer_options)
+            base_out = self.original(x, context, rope_emb=rope_emb,
+                                     transformer_options=transformer_options)
+            if st.get("anchor_base_norm_ref", False):
+                base_cache = st.setdefault("_anchor_base_cache", {})
+                base_cache[self._idx] = _cache_store(
+                    base_out.clone(), bool(st.get("low_vram_cache", False))
+                )
+            return base_out
 
         if not st.get("enabled", False) or context is None:
             return self.original(x, context, rope_emb=rope_emb,
@@ -366,17 +602,74 @@ class CrossAttnWrapper(nn.Module):
         ws, fade_comp = self._effective_weights(weights, fades)
         n = len(individuals)
         static_capture = self._st.get("artist_static_capture", False)
+        norm_scope = _resolve_norm_lock_scope(self._st.get("norm_lock_scope", NORM_LOCK_SCOPE_PER_ARTIST))
+        do_norm_lock = self._st.get("match_base_norm", True) and fusion_mode in (
+            FUSION_INTERPOLATE, FUSION_BASE_PRESERVE
+        )
         # The static-capture path must collect N independent outputs to cache
         # them. concat_with_base cannot be cached and skips this.
         force_collect = static_capture and fusion_mode != FUSION_CONCAT_WITH_BASE
+        static_needs_base = (
+            force_collect
+            and _resolve_static_capture_mode(self._st.get("static_capture_mode"))
+            in (
+                STATIC_CAPTURE_MODE_DELTA,
+                STATIC_CAPTURE_MODE_BLEND,
+                STATIC_CAPTURE_MODE_BLEND_PERP,
+            )
+        )
+        per_artist_lock = do_norm_lock and norm_scope in (
+            NORM_LOCK_SCOPE_PER_ARTIST, NORM_LOCK_SCOPE_BOTH
+        )
+        mixed_lock = do_norm_lock and norm_scope in (
+            NORM_LOCK_SCOPE_MIXED, NORM_LOCK_SCOPE_BOTH
+        )
+        balance_deltas = (
+            self._contribution_balance_alpha() > 0.0
+            and fusion_mode in (FUSION_INTERPOLATE, FUSION_BASE_PRESERVE)
+            and n >= 2
+        )
+        cap_mixed_delta = (
+            self._mixed_delta_cap_ratio() > 0.0
+            and fusion_mode in (FUSION_INTERPOLATE, FUSION_BASE_PRESERVE)
+        )
+
+        skip_fusion = (
+            fusion_mode == FUSION_INTERPOLATE and strength == 1.0 and all(mask)
+        )
+        base_out = None
+        need_base_out = (
+            do_norm_lock
+            or balance_deltas
+            or cap_mixed_delta
+            or abs(fade_comp) > 1e-6
+            or fusion_mode == FUSION_BASE_PRESERVE
+            or static_needs_base
+            or not skip_fusion
+        )
+        if need_base_out:
+            base_out = self.original(x, context, rope_emb=rope_emb, transformer_options=t_opts)
 
         artist_total = None
-        if force_collect:
+        if force_collect or per_artist_lock or balance_deltas:
             outs = self._get_artist_outputs_with_cache(
-                x, context, rope_emb, t_opts, individuals, fusion_mode
+                x, context, rope_emb, t_opts, individuals, fusion_mode, base_out=base_out
             )
-            for out_i, w in zip(outs, ws):
-                artist_total = out_i * w if artist_total is None else artist_total + out_i * w
+            if per_artist_lock:
+                outs = [
+                    self._match_base_norm(out_i, base_out, mask, scale_floor=0.0)
+                    for out_i in outs
+                ]
+            if balance_deltas:
+                outs = self._balance_artist_deltas(outs, base_out, ws, mask)
+                delta_total = None
+                for out_i, w in zip(outs, ws):
+                    delta_i = (out_i - base_out).to(torch.float32) * float(w)
+                    delta_total = delta_i if delta_total is None else delta_total + delta_i
+                artist_total = base_out + delta_total.to(base_out.dtype)
+            else:
+                for out_i, w in zip(outs, ws):
+                    artist_total = out_i * w if artist_total is None else artist_total + out_i * w
         elif n >= 2 and not self._st.get("_disable_batched", False):
             try:
                 q_x = self._get_anchor_q_x(x)
@@ -400,32 +693,22 @@ class CrossAttnWrapper(nn.Module):
                 kv = torch.cat([context, artist_b], dim=1) \
                     if fusion_mode == FUSION_CONCAT_WITH_BASE else artist_b
                 out_i = self.original(q_x, kv, rope_emb=rope_emb, transformer_options=t_opts)
+                if per_artist_lock:
+                    out_i = self._match_base_norm(out_i, base_out, mask, scale_floor=0.0)
                 artist_total = out_i * w if artist_total is None else artist_total + out_i * w
 
-        base_out = None
-        if abs(fade_comp) > 1e-6:
+        if abs(fade_comp) > 1e-6 and not balance_deltas:
             # Return the faded-out weight share to the base output so a fully
             # faded artist converges to the original cross-attention.
-            base_out = self.original(x, context, rope_emb=rope_emb, transformer_options=t_opts)
             artist_total = artist_total + fade_comp * base_out
 
         artist_total = self._apply_ema(artist_total, fusion_mode)
 
-        match_norm = (
-            self._st.get("match_base_norm", True)
-            and fusion_mode in (FUSION_INTERPOLATE, FUSION_BASE_PRESERVE)
-        )
-        # base_preserve always needs base_out for the projection. interpolate
-        # can skip it only at exactly strength == 1.0 (extrapolation beyond
-        # 1.0 starts from base again) — unless norm matching needs the base
-        # reference anyway.
-        skip_fusion = (
-            fusion_mode == FUSION_INTERPOLATE and strength == 1.0 and all(mask)
-        )
-        if base_out is None and (match_norm or not skip_fusion):
-            base_out = self.original(x, context, rope_emb=rope_emb, transformer_options=t_opts)
-        if match_norm:
+        if mixed_lock:
             artist_total = self._match_base_norm(artist_total, base_out, mask)
+        artist_total = self._cap_mixed_delta(
+            artist_total, base_out, mask, fusion_mode, strength,
+        )
         if skip_fusion:
             return artist_total
         return self._apply_fusion(base_out, artist_total, mask, fusion_mode, strength)
@@ -581,7 +864,7 @@ class CrossAttnWrapper(nn.Module):
     # ----------------------------------------------------------- lowrank path
 
     def _fwd_lowrank_avg(self, x, context, rope_emb, t_opts,
-                         individuals, weights, fades, mask, fusion_mode, strength):
+                          individuals, weights, fades, mask, fusion_mode, strength):
         """LoRA-style low-rank injection.
 
         delta_i = A_i - A_base
@@ -597,12 +880,33 @@ class CrossAttnWrapper(nn.Module):
         n = len(individuals)
         k = int(self._st.get("lowrank_k", 1))
         k = max(1, min(k, n))
-
-        artist_outs = self._get_artist_outputs_with_cache(
-            x, context, rope_emb, t_opts, individuals, fusion_mode
+        norm_scope = _resolve_norm_lock_scope(self._st.get("norm_lock_scope", NORM_LOCK_SCOPE_PER_ARTIST))
+        do_norm_lock = self._st.get("match_base_norm", True) and fusion_mode in (
+            FUSION_INTERPOLATE, FUSION_BASE_PRESERVE
+        )
+        per_artist_lock = do_norm_lock and norm_scope in (
+            NORM_LOCK_SCOPE_PER_ARTIST, NORM_LOCK_SCOPE_BOTH
+        )
+        mixed_lock = do_norm_lock and norm_scope in (
+            NORM_LOCK_SCOPE_MIXED, NORM_LOCK_SCOPE_BOTH
+        )
+        balance_deltas = (
+            self._contribution_balance_alpha() > 0.0
+            and fusion_mode in (FUSION_INTERPOLATE, FUSION_BASE_PRESERVE)
+            and n >= 2
         )
 
         base_out = self.original(x, context, rope_emb=rope_emb, transformer_options=t_opts)
+        artist_outs = self._get_artist_outputs_with_cache(
+            x, context, rope_emb, t_opts, individuals, fusion_mode, base_out=base_out
+        )
+        if per_artist_lock:
+            artist_outs = [
+                self._match_base_norm(o, base_out, mask, scale_floor=0.0)
+                for o in artist_outs
+            ]
+        if balance_deltas:
+            artist_outs = self._balance_artist_deltas(artist_outs, base_out, ws, mask)
         out_dtype = base_out.dtype
 
         A = torch.stack(artist_outs, dim=0).to(torch.float32)   # (N, B, T, D)
@@ -634,6 +938,11 @@ class CrossAttnWrapper(nn.Module):
         artist_total = base_out + delta_avg
 
         artist_total = self._apply_ema(artist_total, fusion_mode)
+        if mixed_lock:
+            artist_total = self._match_base_norm(artist_total, base_out, mask)
+        artist_total = self._cap_mixed_delta(
+            artist_total, base_out, mask, fusion_mode, strength,
+        )
 
         if fusion_mode == FUSION_INTERPOLATE and strength == 1.0 and all(mask):
             return artist_total
@@ -647,18 +956,29 @@ class CrossAttnWrapper(nn.Module):
         artist_b = broadcast_batch(combined, bsz).to(
             device=context.device, dtype=context.dtype)
 
+        norm_scope = _resolve_norm_lock_scope(self._st.get("norm_lock_scope", NORM_LOCK_SCOPE_PER_ARTIST))
+        do_norm_lock = self._st.get("match_base_norm", True) and fusion_mode in (
+            FUSION_INTERPOLATE, FUSION_BASE_PRESERVE
+        )
+        mixed_lock = do_norm_lock and norm_scope in (
+            NORM_LOCK_SCOPE_MIXED, NORM_LOCK_SCOPE_BOTH
+        )
+
         if fusion_mode in (FUSION_INTERPOLATE, FUSION_BASE_PRESERVE):
             base_out = self.original(x, context, rope_emb=rope_emb, transformer_options=t_opts)
             # Reuse the K-step averaging machinery with a single pseudo
             # artist, so combined paths get the same temporal smoothing as
             # output_avg instead of a first-step-only snapshot.
             outs = self._get_artist_outputs_with_cache(
-                x, context, rope_emb, t_opts, [artist_b], fusion_mode
+                x, context, rope_emb, t_opts, [artist_b], fusion_mode, base_out=base_out
             )
             artist_out = outs[0]
             artist_out = self._apply_ema(artist_out, fusion_mode)
-            if self._st.get("match_base_norm", True):
+            if mixed_lock:
                 artist_out = self._match_base_norm(artist_out, base_out, mask)
+            artist_out = self._cap_mixed_delta(
+                artist_out, base_out, mask, fusion_mode, strength,
+            )
 
             if fusion_mode == FUSION_INTERPOLATE and strength == 1.0 and all(mask):
                 return artist_out

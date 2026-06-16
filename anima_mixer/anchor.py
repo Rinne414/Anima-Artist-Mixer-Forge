@@ -40,6 +40,13 @@ def _call_diffusion_forward(dm, x, timestep, context, transformer_options):
     return dm(x, timestep, context, transformer_options=transformer_options)
 
 
+def _get_crossattn_context(c_dict):
+    context = c_dict.get("c_crossattn")
+    if context is None:
+        context = c_dict.get("context")
+    return context
+
+
 def make_sigma_capture(state, prev_wrapper):
     """Wrap the model forward to:
     1. Capture the current sigma.
@@ -70,12 +77,16 @@ def make_sigma_capture(state, prev_wrapper):
                 or (cur_sigma is not None and cur_sigma > prev_sigma + 1e-3)
             )
             state["_anchor_last_sigma"] = cur_sigma
-            if is_run_start or not state.get("_anchor_cache"):
+            if (
+                state.get("anchor_refresh_each_step", False)
+                or is_run_start
+                or not state.get("_anchor_cache")
+            ):
                 user_x = options.get("input")
                 user_ts = options.get("timestep")
                 c_dict = options.get("c", {}) or {}
                 if user_x is not None and user_ts is not None and c_dict:
-                    maybe_run_anchor(state, user_x, user_ts, c_dict)
+                    maybe_run_anchor(state, user_x, user_ts, c_dict, apply_model=apply_model)
 
         if prev_wrapper is not None:
             return prev_wrapper(apply_model, options)
@@ -83,19 +94,21 @@ def make_sigma_capture(state, prev_wrapper):
     return wrapper
 
 
-def maybe_run_anchor(state, user_x, user_timestep, c_dict):
+def maybe_run_anchor(state, user_x, user_timestep, c_dict, apply_model=None):
     """Run the anchor pre-pass when the cache misses.
 
     Generates fixed-seed noise, runs a full model forward with
     ``state["_in_anchor_run"] = True`` so each CrossAttnWrapper captures its
     layer input into ``state["_anchor_cache"]`` without injecting artists.
 
-    Called from the model_function_wrapper before the main forward starts,
-    so it cannot recurse.
+    Called from the model_function_wrapper before the main forward starts.
+    When ComfyUI provides ``apply_model``, use it so object patches are active
+    and the CrossAttnWrapper instances can capture per-layer hidden states.
     """
-    base_context = c_dict.get("context")
+    base_context = _get_crossattn_context(c_dict)
     if base_context is None:
         return
+    original_context = base_context
 
     # Under CFG, use the cond row as the anchor conditioning.
     transformer_options = c_dict.get("transformer_options", {}) or {}
@@ -114,7 +127,7 @@ def maybe_run_anchor(state, user_x, user_timestep, c_dict):
         sigma_key = None
     new_key = (
         tuple(user_x.shape),
-        _context_fingerprint(c_dict.get("context")),
+        _context_fingerprint(original_context),
         sigma_key,
     )
     if cache_key == new_key and state.get("_anchor_cache"):
@@ -123,6 +136,7 @@ def maybe_run_anchor(state, user_x, user_timestep, c_dict):
     dm = state["dm_ref"]
 
     state["_anchor_cache"] = {}
+    state["_anchor_base_cache"] = {}
     state["_in_anchor_run"] = True
 
     bsz = user_x.shape[0]
@@ -167,6 +181,7 @@ def maybe_run_anchor(state, user_x, user_timestep, c_dict):
             seeds = ANCHOR_SEEDS_POOL[:seeds_count]
 
             accumulator = {}   # layer_idx -> fp32 sum of hidden states
+            base_accumulator = {}   # layer_idx -> fp32 sum of base outputs
             for seed in seeds:
                 gen = torch.Generator(device=user_x.device)
                 gen.manual_seed(seed)
@@ -175,14 +190,30 @@ def maybe_run_anchor(state, user_x, user_timestep, c_dict):
                     device=user_x.device, dtype=user_x.dtype,
                 )
                 state["_anchor_cache"] = {}
-                _call_diffusion_forward(
-                    dm, anchor_x_k, user_timestep, processed_ctx, safe_opts,
-                )
+                state["_anchor_base_cache"] = {}
+                if apply_model is not None:
+                    apply_model(
+                        anchor_x_k,
+                        user_timestep,
+                        c_crossattn=processed_ctx,
+                        transformer_options=safe_opts,
+                    )
+                else:
+                    _call_diffusion_forward(
+                        dm, anchor_x_k, user_timestep, processed_ctx, safe_opts,
+                    )
                 for layer_idx, hidden in state["_anchor_cache"].items():
                     if layer_idx not in accumulator:
                         accumulator[layer_idx] = hidden.to(torch.float32)
                     else:
                         accumulator[layer_idx] = accumulator[layer_idx] + hidden.to(torch.float32)
+                for layer_idx, base_out in state.get("_anchor_base_cache", {}).items():
+                    if layer_idx not in base_accumulator:
+                        base_accumulator[layer_idx] = base_out.to(torch.float32)
+                    else:
+                        base_accumulator[layer_idx] = (
+                            base_accumulator[layer_idx] + base_out.to(torch.float32)
+                        )
 
             inv = 1.0 / max(1, seeds_count)
             avg_dtype = user_x.dtype
@@ -192,12 +223,18 @@ def maybe_run_anchor(state, user_x, user_timestep, c_dict):
                 avg = (acc * inv).to(avg_dtype)
                 anchor_cache[idx] = avg.cpu() if low_vram else avg
             state["_anchor_cache"] = anchor_cache
+            anchor_base_cache = {}
+            for idx, acc in base_accumulator.items():
+                avg = (acc * inv).to(avg_dtype)
+                anchor_base_cache[idx] = avg.cpu() if low_vram else avg
+            state["_anchor_base_cache"] = anchor_base_cache
     except Exception as e:
         logger.warning(
             "[AnimaCrossAttn] anchor pre-run failed; anchor_q is disabled "
             "for this session: %s", e,
         )
         state["_anchor_cache"] = {}
+        state["_anchor_base_cache"] = {}
         state["_anchor_failed"] = True
     finally:
         state["_in_anchor_run"] = False

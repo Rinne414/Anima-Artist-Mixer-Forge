@@ -17,11 +17,20 @@ from .constants import (
     FUSION_INTERPOLATE,
     ANCHOR_LAYER_THRESHOLD_DISABLED,
     ANCHOR_SEEDS_MAX,
+    CONTRIB_BALANCE_ALPHA_DEFAULT,
+    MIXED_DELTA_CAP_RATIO_DEFAULT,
+    MIXED_DELTA_CAP_RATIO_MAX,
+    NORM_LOCK_SCOPE_PER_ARTIST,
+    NORM_LOCK_TOKEN,
     MAX_ARTISTS,
+    PRESET_CHOICES,
+    PRESET_DRIFT_AUTO,
+    STATIC_CAPTURE_BLEND_ALPHA_DEFAULT,
     STATIC_CAPTURE_K_DEFAULT,
     STATIC_CAPTURE_K_MAX,
+    STATIC_CAPTURE_MODE_OUTPUT,
 )
-from .options import merge_runtime_options
+from .options import build_preset_payload, merge_runtime_options
 from .parsing import (
     parse_artist_layer_routes,
     parse_artist_timing_routes,
@@ -187,6 +196,60 @@ class AnimaArtistPack:
         },)
 
 
+class AnimaArtistBasic:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model": ("MODEL",),
+                "clip": ("CLIP",),
+                "artist_chain": ("STRING", {
+                    "multiline": True,
+                    "default": "",
+                    "tooltip": "Artists separated by comma or newline.",
+                }),
+                "base_prompt": ("STRING", {
+                    "multiline": True,
+                    "default": "",
+                    "tooltip": "Main positive prompt. Do not repeat artist names here.",
+                }),
+                "preset": (PRESET_CHOICES, {
+                    "default": PRESET_DRIFT_AUTO,
+                    "tooltip": "Recommended: keep drift_auto unless you need a specific route.",
+                }),
+                "intensity": ("FLOAT", {
+                    "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05,
+                    "tooltip": "Preset strength multiplier.",
+                }),
+                "enabled": ("BOOLEAN", {"default": True}),
+            },
+        }
+
+    RETURN_TYPES = ("MODEL", "CONDITIONING")
+    RETURN_NAMES = ("model", "base_prompt")
+    FUNCTION = "apply"
+    CATEGORY = "Anima/CrossAttn"
+
+    def apply(self, model, clip, artist_chain, base_prompt, preset, intensity, enabled):
+        artist_pack = AnimaArtistPack().pack(clip, artist_chain, base_prompt)[0]
+        payload = build_preset_payload(
+            preset,
+            intensity,
+            normalize_weights=True,
+            artist_count=len(artist_pack.get("labels") or []),
+        )
+        return AnimaArtistCrossAttn().patch(
+            model,
+            artist_pack,
+            COMBINE_OUTPUT_AVG,
+            FUSION_INTERPOLATE,
+            1.0,
+            enabled,
+            False,
+            preset=payload,
+        )
+
+
 # ComfyUI's percent_to_sigma(0.0) returns a huge sentinel (999999999.9)
 # meaning "always active". Fine for window-inclusion tests, but useless as a
 # finite anchor for fade interpolation.
@@ -251,15 +314,31 @@ def _build_runtime_state(enabled, fusion_mode, combine_mode, strength,
         "lowrank_k": int(adv.get("lowrank_k", 1)),
         "artist_static_capture": bool(adv.get("artist_static_capture", False)),
         "static_capture_k": int(adv.get("static_capture_k", STATIC_CAPTURE_K_DEFAULT)),
+        "static_capture_mode": str(adv.get("static_capture_mode", STATIC_CAPTURE_MODE_OUTPUT)),
+        "static_capture_blend_alpha": float(
+            adv.get("static_capture_blend_alpha", STATIC_CAPTURE_BLEND_ALPHA_DEFAULT)
+        ),
         "artist_anchor_q": bool(adv.get("artist_anchor_q", False)),
         "anchor_seeds_count": int(adv.get("anchor_seeds_count", 1)),
         "anchor_user_blend": float(adv.get("anchor_user_blend", 0.0)),
         "anchor_deep_layer_threshold": int(
             adv.get("anchor_deep_layer_threshold", ANCHOR_LAYER_THRESHOLD_DISABLED)
         ),
+        "anchor_refresh_each_step": bool(adv.get("anchor_refresh_each_step", False)),
         "max_batch_artists": int(adv.get("max_batch_artists", 0) or 0),
         "low_vram_cache": bool(adv.get("low_vram_cache", False)),
         "match_base_norm": bool(adv.get("match_base_norm", True)),
+        "anchor_base_norm_ref": bool(adv.get("anchor_base_norm_ref", False)),
+        "norm_lock_mode": str(adv.get("norm_lock_mode", NORM_LOCK_TOKEN)),
+        "norm_lock_scope": str(adv.get("norm_lock_scope", NORM_LOCK_SCOPE_PER_ARTIST)),
+        "contribution_balance": bool(adv.get("contribution_balance", False)),
+        "contribution_balance_alpha": float(
+            adv.get("contribution_balance_alpha", CONTRIB_BALANCE_ALPHA_DEFAULT)
+        ),
+        "mixed_delta_cap": bool(adv.get("mixed_delta_cap", False)),
+        "mixed_delta_cap_ratio": float(
+            adv.get("mixed_delta_cap_ratio", MIXED_DELTA_CAP_RATIO_DEFAULT)
+        ),
         "individuals": None,
         "real_lens": None,
         "dm_ref": dm,
@@ -271,6 +350,7 @@ def _build_runtime_state(enabled, fusion_mode, combine_mode, strength,
         "_static_cache": {},
         "_static_max_sigma": None,
         "_anchor_cache": {},
+        "_anchor_base_cache": {},
         "_anchor_cache_key": None,
         "_anchor_last_sigma": None,
         "_in_anchor_run": False,
@@ -336,8 +416,15 @@ class AnimaArtistCrossAttn:
 
     def patch(self, model, artist_pack, combine_mode, fusion_mode,
               strength, enabled, apply_to_uncond, advanced_options=None, preset=None):
+        base_prompt = ""
+        artist_count = 0
+        if isinstance(artist_pack, dict):
+            base_prompt = str(artist_pack.get("base_prompt", "") or "")
+            artist_count = len(artist_pack.get("labels") or [])
         combine_mode, fusion_mode, strength, adv, preset_name = merge_runtime_options(
             combine_mode, fusion_mode, strength, advanced_options, preset,
+            base_prompt=base_prompt,
+            artist_count=artist_count,
         )
 
         if not isinstance(artist_pack, dict):
@@ -365,11 +452,25 @@ class AnimaArtistCrossAttn:
         artist_static_capture = bool(adv.get("artist_static_capture", False))
         static_capture_k = int(adv.get("static_capture_k", STATIC_CAPTURE_K_DEFAULT))
         adv["static_capture_k"] = max(1, min(static_capture_k, STATIC_CAPTURE_K_MAX))
+        static_blend_alpha = float(
+            adv.get("static_capture_blend_alpha", STATIC_CAPTURE_BLEND_ALPHA_DEFAULT)
+        )
+        adv["static_capture_blend_alpha"] = max(0.0, min(1.0, static_blend_alpha))
         artist_anchor_q = bool(adv.get("artist_anchor_q", False))
         anchor_seeds_count = int(adv.get("anchor_seeds_count", 1))
         adv["anchor_seeds_count"] = max(1, min(anchor_seeds_count, ANCHOR_SEEDS_MAX))
         anchor_user_blend = float(adv.get("anchor_user_blend", 0.0))
         adv["anchor_user_blend"] = max(0.0, min(1.0, anchor_user_blend))
+        contribution_balance_alpha = float(
+            adv.get("contribution_balance_alpha", CONTRIB_BALANCE_ALPHA_DEFAULT)
+        )
+        adv["contribution_balance_alpha"] = max(0.0, min(1.0, contribution_balance_alpha))
+        mixed_delta_cap_ratio = float(
+            adv.get("mixed_delta_cap_ratio", MIXED_DELTA_CAP_RATIO_DEFAULT)
+        )
+        adv["mixed_delta_cap_ratio"] = max(
+            0.0, min(MIXED_DELTA_CAP_RATIO_MAX, mixed_delta_cap_ratio)
+        )
 
         use_sigma_range = (start_percent > 0.0) or (end_percent < 1.0)
         need_sigma_capture = (
@@ -402,6 +503,9 @@ class AnimaArtistCrossAttn:
                 "fusion=concat_with_base; anchor_q is disabled for this run."
             )
             adv["artist_anchor_q"] = False
+        if not adv.get("artist_anchor_q", False):
+            adv["anchor_base_norm_ref"] = False
+            adv["anchor_refresh_each_step"] = False
         labels = artist_pack.get("labels") or []
         layer_route_texts = artist_pack.get("layer_routes") or []
         timing_route_texts = artist_pack.get("timing_routes") or []

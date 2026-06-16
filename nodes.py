@@ -7,6 +7,7 @@ for older code that did ``from <plugin>.nodes import ...``.
 
 from .anima_mixer import NODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS
 from .anima_mixer.nodes_core import (
+    AnimaArtistBasic,
     AnimaArtistCrossAttn,
     AnimaArtistPack,
     AnimaArtistProbe,
@@ -26,6 +27,7 @@ from .anima_mixer.nodes_ui import (
 __all__ = [
     "NODE_CLASS_MAPPINGS",
     "NODE_DISPLAY_NAME_MAPPINGS",
+    "AnimaArtistBasic",
     "AnimaArtistCrossAttn",
     "AnimaArtistPack",
     "AnimaArtistProbe",

@@ -6,6 +6,7 @@ artist tags share one prompt. See CHANGELOG.md for version history.
 """
 
 from .nodes_core import (
+    AnimaArtistBasic,
     AnimaArtistCrossAttn,
     AnimaArtistPack,
     AnimaArtistProbe,
@@ -23,6 +24,7 @@ from .nodes_ui import (
 )
 
 NODE_CLASS_MAPPINGS = {
+    "AnimaArtistBasic": AnimaArtistBasic,
     "AnimaArtistStarter": AnimaArtistStarter,
     "AnimaArtistChainBuilder": AnimaArtistChainBuilder,
     "AnimaArtistChainPreview": AnimaArtistChainPreview,
@@ -38,6 +40,7 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
+    "AnimaArtistBasic": "Anima Artist Basic (Recommended)",
     "AnimaArtistStarter": "Anima Artist Starter",
     "AnimaArtistChainBuilder": "Anima Artist Chain Builder",
     "AnimaArtistChainPreview": "Anima Artist Chain Preview",

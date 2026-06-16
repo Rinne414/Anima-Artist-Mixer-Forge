@@ -9,19 +9,26 @@ model, and a live server) — run it directly:
 """
 
 import json
+import os
 import time
 import urllib.error
 import urllib.request
 
-SERVER = "http://127.0.0.1:8188"
+SERVER = os.environ.get("ANIMA_SMOKE_SERVER", "http://127.0.0.1:8188")
 
 # --- base pipeline models (discovered on the target machine) ----------------
 UNET = "Anima\\anime\\anima_baseV10.safetensors"
 CLIP = "qwen_3_06b_base.safetensors"
 VAE = "qwen_image_vae.safetensors"
 
-BASE_PROMPT = "1girl, solo, masterpiece, best quality, upper body"
-NEG_PROMPT = "lowres, worst quality, bad anatomy"
+BASE_PROMPT = (
+    "1girl, solo, masterpiece, best quality, upper body portrait, face visible, "
+    "wearing a white blouse and navy jacket, looking at viewer, simple background"
+)
+NEG_PROMPT = (
+    "nsfw, nude, naked, bare chest, cleavage, nipples, cropped head, "
+    "head out of frame, lowres, worst quality, bad anatomy"
+)
 ARTISTS = "@uof, @kieed, @ciloranko"
 
 WIDTH, HEIGHT, STEPS, CFG, SEED = 512, 512, 8, 5.0, 42
@@ -45,11 +52,18 @@ def default_opts(**over):
         "start_percent": 0.0, "end_percent": 1.0,
         "normalize_weights": True, "artist_ema_alpha": 0.0,
         "lowrank_k": 1, "artist_static_capture": False,
-        "static_capture_k": 6, "artist_anchor_q": False,
+        "static_capture_k": 6, "static_capture_mode": "output",
+        "static_capture_blend_alpha": 0.25,
+        "artist_anchor_q": False,
         "anchor_seeds_count": 1, "anchor_user_blend": 0.0,
-        "anchor_deep_layer_threshold": -1, "layer_filter": "",
+        "anchor_deep_layer_threshold": -1, "anchor_refresh_each_step": False,
+        "layer_filter": "",
         "compatibility_mode": False, "max_batch_artists": 0,
-        "low_vram_cache": False,
+        "low_vram_cache": False, "match_base_norm": True,
+        "anchor_base_norm_ref": False,
+        "norm_lock_mode": "token", "norm_lock_scope": "per_artist",
+        "contribution_balance": False, "contribution_balance_alpha": 1.0,
+        "mixed_delta_cap": False, "mixed_delta_cap_ratio": 1.0,
     }
     o.update(over)
     return o
@@ -205,28 +219,54 @@ TESTS = [
                                   fusion="base_preserve")),
     ("07 preset compatibility_safe",
      lambda: build_sampling_graph(ARTISTS, use_preset="compatibility_safe")),
-    ("08 static_capture",
+    ("08 preset stable_seed",
+     lambda: build_sampling_graph(ARTISTS, use_preset="stable_seed")),
+    ("08a preset drift_auto",
+     lambda: build_sampling_graph(ARTISTS, use_preset="drift_auto")),
+    ("08b preset drift_soft",
+     lambda: build_sampling_graph(ARTISTS, use_preset="drift_soft")),
+    ("08c preset face_lock",
+     lambda: build_sampling_graph(ARTISTS, use_preset="face_lock")),
+    ("08d preset scene_lock",
+     lambda: build_sampling_graph(ARTISTS, use_preset="scene_lock")),
+    ("08e preset anchor_lock",
+     lambda: build_sampling_graph(ARTISTS, use_preset="anchor_lock")),
+    ("09 static_capture",
      lambda: build_sampling_graph(
          ARTISTS, opts=default_opts(artist_static_capture=True,
                                     static_capture_k=4))),
-    ("09 anchor_q multiseed",
+    ("10 anchor_q multiseed",
      lambda: build_sampling_graph(
          ARTISTS, opts=default_opts(artist_anchor_q=True,
                                     anchor_seeds_count=2))),
-    ("10 layer route @0-8",
+    ("10b anchor norm ref",
+     lambda: build_sampling_graph(
+         ARTISTS, opts=default_opts(artist_anchor_q=True,
+                                    anchor_seeds_count=2,
+                                    anchor_base_norm_ref=True))),
+    ("10c anchor refresh",
+     lambda: build_sampling_graph(
+         ARTISTS, opts=default_opts(artist_anchor_q=True,
+                                    anchor_refresh_each_step=True,
+                                    match_base_norm=False))),
+    ("11 layer route @0-8",
      lambda: build_sampling_graph("@uof@0-8, @kieed@9-27")),
-    ("11 max_batch + low_vram (4 artists)",
+    ("12 max_batch + low_vram (4 artists)",
      lambda: build_sampling_graph(
          "@uof, @kieed, @ciloranko, @huanxiang_heitu",
          opts=default_opts(max_batch_artists=2, low_vram_cache=True))),
-    ("12 batch_size=2 CFG mask",
+    ("13 batch_size=2 CFG mask",
      lambda: build_sampling_graph(ARTISTS, batch_size=2)),
-    ("13 strength extrapolation 2.0",
+    ("14 strength extrapolation 2.0",
      lambda: build_sampling_graph(ARTISTS, strength=2.0)),
-    ("14 recipe save/load roundtrip",
+    ("15 recipe save/load roundtrip",
      build_recipe_graph),
-    ("15 probe + report",
+    ("16 probe + report",
      lambda: build_probe_graph(ARTISTS)),
+    ("17 contribution balance",
+     lambda: build_sampling_graph(
+         ARTISTS, opts=default_opts(contribution_balance=True,
+                                    contribution_balance_alpha=1.0))),
 ]
 
 

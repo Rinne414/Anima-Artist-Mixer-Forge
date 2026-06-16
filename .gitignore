@@ -28,3 +28,4 @@ debug_*.png
 
 # live smoke-test scratch files (may contain personal prompts)
 tests/_*.json
+.drift_runs/

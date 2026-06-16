@@ -40,13 +40,60 @@
   `wlop%0.0-0.45~0.1`.
 - **Negative weights (style subtraction)** — `::artist::-0.5` pushes a
   style away instead of adding it. Weight range is now [-4, 4].
-- **`match_base_norm` option (default on)** — rescales the mixed artist
-  attention output to the base output's per-row RMS energy (clamped to
-  0.5–2.0x) before fusion. The artist mixture's activation energy can
-  drift from what downstream blocks were trained on; the mismatch
-  compounds across layers and surfaces as seed-dependent style-strength
-  swings (style drift). Style direction is preserved, only magnitude is
-  corrected. Disable to reproduce the previous behavior exactly.
+- **`match_base_norm` option (default on)** — rescales artist attention
+  output to the base output's RMS energy before fusion. v26 now defaults
+  to token-level, per-artist norm locking (`norm_lock_mode=token`,
+  `norm_lock_scope=per_artist`) so each artist is calibrated before the
+  weighted mix. This suppresses seed-specific high-energy artist spikes
+  more aggressively than the legacy whole-row final-output lock while
+  keeping `row` / `mixed` modes available for A/B comparisons.
+- **Stable-seed preset retune** — `stable_seed` now uses the content-safer
+  `output_avg + artist_static_capture + static_capture_k=4 +
+  match_base_norm=False` path, with strength 1.0 and `layer_filter=9-20`
+  when `layer_mode=auto`. Live foreground-weighted A/B across portrait,
+  close-up, and street prompts reduced descriptor drift without the face,
+  clothing, and full-layer smear failures seen in anchor-heavy runs.
+- **Scene-tuned low-drift presets** — added `drift_soft`, `face_lock`, and
+  `scene_lock` to turn measured manual A/B combinations into one-click
+  choices. They keep the static-capture style lock: `drift_soft` lowers
+  strength for portraits, `face_lock` adds token norm locking plus
+  `base_preserve` for close-ups, and `scene_lock` uses a narrower
+  `base_preserve` layer window for explicit wide / background-heavy prompt
+  shapes instead of claiming a single universal drift fix.
+- **`drift_auto` preset** — prompt- and artist-count-aware runtime routing that
+  resolves from `AnimaArtistPack.base_prompt` and the active artist count.
+  4+ artist wide / background-heavy scenes use `face_lock` after live A/B
+  found it had the lowest average regret there, smaller explicit wide /
+  background-heavy scenes use `scene_lock`, 4+ artist simple fullbody prompts
+  use `drift_soft` after live A/B found it had the lowest average regret there,
+  4+ artist close-ups use `stable_seed` plus `mixed_delta_cap_ratio=0.75`
+  after live A/B lowered the worst seed-pair regret, 4+ artist street / urban
+  prompts use full-layer `compatibility_safe`, and other 4+ artist portrait /
+  broad-subject prompts use the internal `compatibility_safe_9_15` route after
+  live A/B made foreground, full, center, and upper-center reductions all
+  positive. Smaller close-ups use `face_lock`, and simpler portrait /
+  broad-subject prompts use `drift_soft`.
+  Inspector reports the resolved preset and reason so users can audit or
+  manually override the decision. This is inference-time control, not training.
+- **`anchor_lock` preset** — preserves the previous measured-strong
+  4-anchor Q behavior (`anchor_seeds_count=4`, `layer_filter=9-25`,
+  `anchor_deep_layer_threshold=16`, strength 1.2) for workflows that prefer
+  the stronger fixed-anchor lock and accept its content-risk tradeoff.
+- **`anchor_base_norm_ref` option** — optional A/B path for `anchor_q` +
+  `match_base_norm` that uses the fixed anchor's base output as the norm
+  reference instead of the current seed's base output.
+- **`contribution_balance` option** — optional per-artist delta equalizer
+  for dominance flips. It is available for A/B work but stays off by default;
+  live multi-seed checks favored static capture as the safer default.
+- **`mixed_delta_cap` option** — optional inference-time limiter for the final
+  mixed artist delta before `interpolate` / `base_preserve` fusion. It caps
+  effective artist-delta RMS against base RMS after strength is considered,
+  giving live A/B a direct way to test lower drift without training or changing
+  the default `drift_auto` route.
+- **`static_capture_mode=blend_perp`** — added an advanced experimental
+  mode that reintroduces only base motion perpendicular to the frozen style
+  delta. Live A/B showed a narrow scene win, but not a stable cross-scene
+  win, so it remains off the default path.
 - ~~`embed_avg` combine mode~~ — cut before release. Live A/B testing at
   real resolutions showed that averaging LLMAdapter embeddings re-creates
   the token-misalignment artifact that got the old `mean`/`weighted_sum`
@@ -68,8 +115,11 @@
 - Real-torch test suite: low-rank determinism, perpendicular projection,
   fusion math, CFG mask expansion, timing fade factors, chunking, anchor
   fingerprints, recipe round-trips.
-- Live ComfyUI smoke harness (`tests/live_comfy_smoke.py`): 15 real
-  sampling workflows against a running server + Anima model.
+- Live ComfyUI smoke harness (`tests/live_comfy_smoke.py`): real sampling
+  workflows against a running server + Anima model, including the low-drift
+  preset paths.
+- Live drift A/B harness (`tests/live_drift_ab.py`): foreground-weighted
+  multi-seed checks for comparing stabilization presets by prompt type.
 
 ---
 
@@ -87,7 +137,7 @@
 - Fixed `::name::weight` explicit weights not actually disabling
   `normalize_weights` on the patch path.
 - Added `AnimaArtistPreset` (balanced / strong_style / stable_seed /
-  fast_preview / identity_guard) and `AnimaArtistInspector`.
+  anchor_lock / fast_preview / identity_guard) and `AnimaArtistInspector`.
 - `lowrank_avg` switched to a deterministic Gram eigendecomposition
   (no randomized SVD approximation).
 - Anchor cache key gained the first timestep/sigma to reduce stale reuse
