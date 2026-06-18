@@ -529,6 +529,8 @@ class CrossAttnWrapper(nn.Module):
             timings = st.get("artist_timing_routes") or []
             cur_sigma = st.get("current_sigma")
             filtered = []
+            keep_zero_fades = combine_mode in (COMBINE_OUTPUT_AVG, COMBINE_LOWRANK_AVG)
+            has_positive_fade = False
             for artist, weight, route, timing in zip(
                 individuals, weights, routes, timings,
             ):
@@ -536,9 +538,12 @@ class CrossAttnWrapper(nn.Module):
                     continue
                 fade = timing_fade_factor(timing, cur_sigma)
                 if fade <= 0.0:
+                    if keep_zero_fades:
+                        filtered.append((artist, weight, 0.0))
                     continue
+                has_positive_fade = True
                 filtered.append((artist, weight, fade))
-            if not filtered:
+            if not filtered or not has_positive_fade:
                 return self.original(x, context, rope_emb=rope_emb,
                                      transformer_options=transformer_options)
             individuals = [item[0] for item in filtered]
@@ -887,9 +892,6 @@ class CrossAttnWrapper(nn.Module):
         delta-space, so a faded artist converges to the base naturally).
         """
         ws, _ = self._effective_weights(weights, fades)
-        n = len(individuals)
-        k = int(self._st.get("lowrank_k", 1))
-        k = max(1, min(k, n))
         norm_scope = _resolve_norm_lock_scope(self._st.get("norm_lock_scope", NORM_LOCK_SCOPE_PER_ARTIST))
         do_norm_lock = self._st.get("match_base_norm", True) and fusion_mode in (
             FUSION_INTERPOLATE, FUSION_BASE_PRESERVE
@@ -900,13 +902,23 @@ class CrossAttnWrapper(nn.Module):
         mixed_lock = do_norm_lock and norm_scope in (
             NORM_LOCK_SCOPE_MIXED, NORM_LOCK_SCOPE_BOTH
         )
+        base_out = self.original(x, context, rope_emb=rope_emb, transformer_options=t_opts)
+        active = [
+            (artist, weight) for artist, weight in zip(individuals, ws)
+            if abs(float(weight)) > 1e-8
+        ]
+        if not active:
+            return base_out
+        individuals = [item[0] for item in active]
+        ws = [item[1] for item in active]
+        n = len(individuals)
+        k = int(self._st.get("lowrank_k", 1))
+        k = max(1, min(k, n))
         balance_deltas = (
             self._contribution_balance_alpha() > 0.0
             and fusion_mode in (FUSION_INTERPOLATE, FUSION_BASE_PRESERVE)
             and n >= 2
         )
-
-        base_out = self.original(x, context, rope_emb=rope_emb, transformer_options=t_opts)
         artist_outs = self._get_artist_outputs_with_cache(
             x, context, rope_emb, t_opts, individuals, fusion_mode, base_out=base_out
         )

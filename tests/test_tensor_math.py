@@ -194,6 +194,33 @@ class WrapperHelpersTest(unittest.TestCase):
         )
         self.assertTrue(torch.allclose(out, torch.full_like(out, 0.5)))
 
+    def test_dispatch_zero_fade_does_not_renormalize_remaining_artist(self):
+        state = {
+            "individuals": [
+                torch.full((1, 3, 1), 14.0),
+                torch.full((1, 3, 1), 20.0),
+            ],
+            "real_lens": [3, 3],
+            "combine_mode": "output_avg",
+            "fusion_mode": "interpolate",
+            "strength": 1.0,
+            "user_weights": [1.0, 1.0],
+            "normalize_weights": True,
+            "apply_to_uncond": False,
+            "match_base_norm": False,
+            "has_artist_timing_routes": True,
+            "artist_layer_routes": [None, None],
+            "artist_timing_routes": [(0.1, 10.0, 8.0, 0.5), None],
+            "current_sigma": 11.0,
+        }
+        w = CrossAttnWrapper(_KVMeanAttn(), state, 0)
+        x = torch.zeros(1, 2, 1)
+        base_ctx = torch.full((1, 3, 1), 10.0)
+
+        out = w._dispatch(x, base_ctx, None, {"cond_or_uncond": [0]})
+
+        self.assertTrue(torch.allclose(out, torch.full_like(out, 15.0)))
+
     def test_output_avg_explicit_weight_scales_artist_delta(self):
         state = {
             "normalize_weights": False, "apply_to_uncond": False,
