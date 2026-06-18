@@ -194,6 +194,42 @@ class WrapperHelpersTest(unittest.TestCase):
         )
         self.assertTrue(torch.allclose(out, torch.full_like(out, 0.5)))
 
+    def test_output_avg_explicit_weight_scales_artist_delta(self):
+        state = {
+            "normalize_weights": False, "apply_to_uncond": False,
+            "match_base_norm": False,
+            "has_explicit_weights": True,
+        }
+        w = CrossAttnWrapper(_KVMeanAttn(), state, 0)
+        x = torch.zeros(1, 2, 1)
+        base_ctx = torch.full((1, 3, 1), 10.0)
+        artist = torch.full((1, 3, 1), 14.0)
+
+        out = w._fwd_output_avg(
+            x, base_ctx, None, {}, [artist], [0.25], [1.0],
+            [True], "interpolate", 1.0,
+        )
+
+        self.assertTrue(torch.allclose(out, torch.full_like(out, 11.0)))
+
+    def test_output_avg_negative_weight_subtracts_artist_delta(self):
+        state = {
+            "normalize_weights": False, "apply_to_uncond": False,
+            "match_base_norm": False,
+            "has_explicit_weights": True,
+        }
+        w = CrossAttnWrapper(_KVMeanAttn(), state, 0)
+        x = torch.zeros(1, 2, 1)
+        base_ctx = torch.full((1, 3, 1), 10.0)
+        artist = torch.full((1, 3, 1), 14.0)
+
+        out = w._fwd_output_avg(
+            x, base_ctx, None, {}, [artist], [-0.5], [1.0],
+            [True], "interpolate", 1.0,
+        )
+
+        self.assertTrue(torch.allclose(out, torch.full_like(out, 8.0)))
+
     def test_artist_chunks_split_by_limit(self):
         w = self._wrapper({"max_batch_artists": 2})
         items = [torch.zeros(1)] * 5

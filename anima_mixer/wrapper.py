@@ -582,24 +582,34 @@ class CrossAttnWrapper(nn.Module):
         Normalization runs on the raw weights FIRST, then each artist's
         share is scaled by its fade factor — otherwise normalizing after the
         fade would cancel it whenever a layer has a single active artist
-        (the common layer_scheduled case). Returns ``(ws, fade_comp)`` where
-        ``fade_comp = sum(w_norm * (1 - fade))`` is the share of weight that
-        faded out and should be returned to the base output so a fully faded
-        artist converges to the original cross-attention instead of zero.
+        (the common layer_scheduled case).
+
+        Returns ``(ws, base_comp)`` where ``base_comp`` is the coefficient for
+        the original base output in delta-space mixing:
+
+            base + sum(w_i * (artist_i - base))
+            == sum(w_i * artist_i) + (1 - sum(w_i)) * base
+
+        For explicit ``::weight`` values this makes ``0.25`` a quarter style
+        delta and ``-0.5`` a subtraction, not a raw output rescale.
         """
-        if self._st.get("normalize_weights", True):
+        should_normalize = self._st.get("normalize_weights", True)
+        if should_normalize:
             ws_base = normalize_weights(weights)
         else:
             ws_base = list(weights)
         ws = [w * f for w, f in zip(ws_base, fades)]
-        fade_comp = sum(w * (1.0 - f) for w, f in zip(ws_base, fades))
-        return ws, fade_comp
+        if should_normalize or self._st.get("has_explicit_weights", False):
+            base_comp = 1.0 - sum(ws)
+        else:
+            base_comp = sum(w * (1.0 - f) for w, f in zip(ws_base, fades))
+        return ws, base_comp
 
     def _fwd_output_avg(self, x, context, rope_emb, t_opts,
                         individuals, weights, fades, mask, fusion_mode, strength):
         bsz = context.shape[0]
 
-        ws, fade_comp = self._effective_weights(weights, fades)
+        ws, base_comp = self._effective_weights(weights, fades)
         n = len(individuals)
         static_capture = self._st.get("artist_static_capture", False)
         norm_scope = _resolve_norm_lock_scope(self._st.get("norm_lock_scope", NORM_LOCK_SCOPE_PER_ARTIST))
@@ -642,7 +652,7 @@ class CrossAttnWrapper(nn.Module):
             do_norm_lock
             or balance_deltas
             or cap_mixed_delta
-            or abs(fade_comp) > 1e-6
+            or abs(base_comp) > 1e-6
             or fusion_mode == FUSION_BASE_PRESERVE
             or static_needs_base
             or not skip_fusion
@@ -697,10 +707,10 @@ class CrossAttnWrapper(nn.Module):
                     out_i = self._match_base_norm(out_i, base_out, mask, scale_floor=0.0)
                 artist_total = out_i * w if artist_total is None else artist_total + out_i * w
 
-        if abs(fade_comp) > 1e-6 and not balance_deltas:
-            # Return the faded-out weight share to the base output so a fully
-            # faded artist converges to the original cross-attention.
-            artist_total = artist_total + fade_comp * base_out
+        if abs(base_comp) > 1e-6 and not balance_deltas:
+            # Return the unclaimed share to the base output. This covers both
+            # timing fades and explicit weights smaller/larger than 1.0.
+            artist_total = artist_total + base_comp * base_out
 
         artist_total = self._apply_ema(artist_total, fusion_mode)
 
