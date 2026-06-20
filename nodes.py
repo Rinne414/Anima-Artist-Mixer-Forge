@@ -1,4 +1,65 @@
-"""Anima/MiniTrainDIT cross-attention 多画师注入 v24。
+"""Anima/MiniTrainDIT cross-attention 多画师注入 v26。
+===== v26 改动 =====
+
+1. ::weight 语法新增前置写法 'weight::name'，仅语法变化，语义不变。
+
+   动机：NovelAI 风格的括号语法 (1.5:wlop)、(wlop:1.5)都是「名字在一侧、权重在另一侧」，
+   用户复制过来后只需加 :: 分隔即可。v25 后置写法 ::wlop::1.5 不能直接复制，
+   体验不顺。v26 推荐前置写法 1.5::wlop 作为默认。
+
+   语法：
+     1.5::wlop                 → weight 1.5 (推荐)
+     0.8::(wlop:1.1)           → 括号非线性 + 注入层 0.8
+     wlop::1.5 / ::wlop::1.5   → 后置写法仅为兼容保留
+
+   解析顺序：先尝试前置，失败 fallback 后置。两者不能同项混用
+   （'1.5::wlop::2.0' 会被当作前置，weight=1.5）。
+
+2. base_prompt 也支持 ::weight 语法，语法为 'weight::target::'（尾部 :: 显式标记 target 边界）。
+
+   例：
+     1.5::masterpiece::, 1girl                  → (masterpiece:1.5), 1girl
+     1.3::detailed background, intricate::, 1girl → (detailed background, intricate:1.3), 1girl
+
+   与ARTIST_CHAIN 不同的是：
+   - 只走前置写法（避免与句子中 :: 装饰文字混淆）
+   - 尾部 :: 可跨逗号，不跨换行
+   - 完全等价于 ComfyUI 括号语法（展开为 (target:weight) 后传给 CLIP）
+
+   主要作用：贴近 NovelAI 习惯，从其他地方复制质量词更顺手。
+
+其他完全不变：weight 范围、has_explicit 逻辑、括号叠加语义、所有下游路径。
+
+===== v25 改动 =====
+
+新增 stabilizer_end_percent：缓存类稳定器（static_capture / anchor_q / EMA）
+在采样进度超过该阈值后自动失效，退化到 dynamic 模式。
+
+动机：FLS（Foveated Latent Sampler）等基于「step 间 latent 变化」做局部锐化/
+纹理注入的采样器，与本插件的稳定器设计哲学相反——
+  - 本插件：抹平 step 间画师贡献的变化，让画风跨 seed/跨 step 稳定
+  - FLS：放大 step 间变化，依赖 |x0 - prev_x0| 检测活跃区域
+
+两者完全开启时相互抵消，FLS 的检测被压平、效果减弱。
+
+方案：让稳定器在前期生效（建立画风稳定基线）、后期自动让位（让真实 step 间
+变化恢复，FLS 才能正常检测）。stabilizer_end_percent=0.5 即「采样前 50% 启用
+稳定器、后 50% 退化为 dynamic」是 FLS 用户的推荐起点。
+
+参数：
+  stabilizer_end_percent ∈ [0.0, 1.0]，默认 1.0
+  1.0 = 全程启用稳定器（v24 行为，向后兼容）
+  0.4-0.6 = FLS 推荐范围
+  0.0 = 完全禁用所有缓存类稳定器（等价全部关掉）
+
+影响范围：static_capture / anchor_q / EMA。
+lowrank_avg 不受影响——它是空间投影约束，不依赖时序累积。
+sigma_range（start_percent / end_percent）也不受影响——它控制注入开关，与稳定
+器是独立维度。
+
+实现：把 stabilizer_end_percent 转成 sigma 阈值（stabilizer_min_sigma），
+每次进 wrapper.forward 时比较 current_sigma 与该阈值，低于则视为「稳定期结束」。
+
 ===== v24 改动 =====
 
 新增 ::name::weight 画师串语法——作用于 cross-attn 注入层的线性权重。
@@ -173,25 +234,34 @@ def _split_artist_chain(chain):
 
 
 def _parse_artist_weights(parts):
-    """v24 新语法解析：从切好的画师串里提取 ::name::weight 的权重。
+    """v26 画师权重解析：支持前置（推荐）和后置（兼容）两种语法。
 
-    输入: list[str]（每项可能是 'wlop'、'::wlop::1.5'、'(wlop:1.1)'、
-          '(wlop:1.1):0.8'、'::(wlop:1.1)::0.8' 等）。
+    前置（v26 推荐，从 NovelAI 风格复制更顺手）:
+      'weight::name'        例 '1.5::wlop'
+      'weight::(name:w)'    例 '0.8::(wlop:1.1)'  # 括号叠加
+
+    后置（v24-v25 兼容）:
+      'name::weight'        例 'wlop::1.5'
+      '::name::weight'      例 '::wlop::1.5'（前缀 :: 装饰性）
 
     返回: (names, weights, has_explicit)
-      names: list[str] 给 CLIP 编码用（剥离 ::weight 后缀，括号原样保留）
+      names: list[str] 给 CLIP 编码用（剥离 weight 部分，括号原样保留）
       weights: list[float] 每个画师的注入权重（默认 1.0）
-      has_explicit: bool 是否至少一个画师指定了 ::weight
+      has_explicit: bool 是否至少一个画师指定了显式 weight
 
-    支持格式:
+    格式举例:
       'wlop'              → ('wlop', 1.0, False)
-      '::wlop::1.5'       → ('wlop', 1.5, True)
-      '(wlop:1.1)'        → ('(wlop:1.1)', 1.0, False)  # 走 CLIP 非线性，不剥离括号
-      '(wlop:1.1)::0.8'   → ('(wlop:1.1)', 0.8, True)   # 双层叠加
-      '::(wlop:1.1)::0.8' → ('(wlop:1.1)', 0.8, True)   # 等价写法
+      '1.5::wlop'         → ('wlop', 1.5, True)              # v26 推荐
+      'wlop::1.5'         → ('wlop', 1.5, True)              # 后置兼容
+      '::wlop::1.5'       → ('wlop', 1.5, True)              # 后置兼容
+      '(wlop:1.1)'        → ('(wlop:1.1)', 1.0, False)        # 仅 CLIP 括号
+      '0.8::(wlop:1.1)'   → ('(wlop:1.1)', 0.8, True)         # 前置 + 括号叠加
+      '(wlop:1.1)::0.8'   → ('(wlop:1.1)', 0.8, True)         # 后置 + 括号叠加
+      '::wlop'            → ('wlop', 1.0, False)              # 装饰前缀
 
-    无效权重（非数字）回退为默认 1.0，不报错。
-    weight 卡在 [0.0, 4.0] 范围（与 strength 一致）。
+    解析顺序：先尝试前置（首个 :: 前是合法数字），失败 fallback 后置
+    （末尾 :: 后是合法数字）。两端都不是数字 → 当普通文本保留 :: 给用户察觉。
+    weight 卡在 [0.0, 4.0]（与 strength 一致）。
     """
     names = []
     weights = []
@@ -200,24 +270,42 @@ def _parse_artist_weights(parts):
         s = str(raw).strip()
         if not s:
             continue
-        # 形态 1: 'name::weight' 或 '::name::weight'（前缀 :: 是可选的，仅美观）
         weight = 1.0
         explicit = False
+
         if "::" in s:
-            head = s
-            if head.startswith("::"):
-                head = head[2:]
-            if "::" in head:
-                name_part, _, w_part = head.rpartition("::")
-                w_part = w_part.strip()
+            # ── 优先尝试前置语法 'weight::name' ──
+            head, _, tail = s.partition("::")
+            head_stripped = head.strip()
+            tail_stripped = tail.strip()
+            if head_stripped and tail_stripped:
                 try:
-                    w_val = float(w_part)
+                    w_val = float(head_stripped)
                     weight = max(0.0, min(4.0, w_val))
                     explicit = True
-                    s = name_part.strip()
+                    s = tail_stripped
                 except ValueError:
-                    # 权重解析失败 → 当作普通文本，保留原 ::（让用户察觉）
                     pass
+
+            # ── 没命中前置 → 尝试后置 'name::weight' / '::name::weight' ──
+            if not explicit:
+                tmp = s
+                if tmp.startswith("::"):
+                    tmp = tmp[2:]
+                if "::" in tmp:
+                    name_part, _, w_part = tmp.rpartition("::")
+                    try:
+                        w_val = float(w_part.strip())
+                        weight = max(0.0, min(4.0, w_val))
+                        explicit = True
+                        s = name_part.strip()
+                    except ValueError:
+                        # 既不是前置也不是后置数字 → 当普通文本保留 ::（让用户察觉）
+                        pass
+                elif s.startswith("::"):
+                    # 装饰前缀 '::wlop' → 剥掉前缀，weight 默认 1.0
+                    s = tmp.strip()
+
         if not s:
             continue
         names.append(s)
@@ -225,6 +313,80 @@ def _parse_artist_weights(parts):
         if explicit:
             has_explicit = True
     return names, weights, has_explicit
+
+
+def _expand_prompt_weights(text):
+    """v26: 将 base_prompt 里的 'weight::target::' 展开为 ComfyUI 标准括号语法 '(target:weight)'。
+
+    语法设计：尾部 :: 显式标记 target 边界（可跨逗号）。
+      '1.5::masterpiece::, 1girl'                  → '(masterpiece:1.5), 1girl'
+      '1.3::detailed background, intricate::, 1girl' → '(detailed background, intricate:1.3), 1girl'
+      'masterpiece, 1.5::high quality::, ok'        → 'masterpiece, (high quality:1.5), ok'
+
+    不匹配的情况（保留原样，让用户察觉）：
+      '1.5::masterpiece'      （缺尾部 ::）
+      'abc::masterpiece::'    （前缀不是数字）
+
+    只走前置写法（weight::target::）；base_prompt 不支持后置，避免与句子中 :: 装饰文字混淆。
+    weight 卡在 [0.0, 4.0]（与 strength 一致）。
+    不修改 括号语法 (name:1.5) —— ComfyUI 原生语法原样传递。
+    """
+    if not text or "::" not in text:
+        return text
+
+    result = []
+    i = 0
+    n = len(text)
+    while i < n:
+        sep = text.find("::", i)
+        if sep < 0:
+            result.append(text[i:])
+            break
+        # 向前看：从 sep 向左查 weight，上个边界为逗号/换行/文本头
+        boundary_left = i
+        for j in range(sep - 1, i - 1, -1):
+            if text[j] in ",\n\r":
+                boundary_left = j + 1
+                break
+        weight_str = text[boundary_left:sep].strip()
+        weight_val = None
+        try:
+            w = float(weight_str)
+            weight_val = max(0.0, min(4.0, w))
+        except ValueError:
+            pass
+        if weight_val is None:
+            # 不是合法 weight → 跳过该 ::保留原文
+            result.append(text[i:sep + 2])
+            i = sep + 2
+            continue
+        # 向后看：在 sep+2 之后查找尾部 '::'（不允许跨过换行）
+        target_start = sep + 2
+        while target_start < n and text[target_start] == " ":
+            target_start += 1
+        end_marker = -1
+        k = target_start
+        while k < n - 1:
+            if text[k] == "\n" or text[k] == "\r":
+                break
+            if text[k] == ":" and text[k + 1] == ":":
+                end_marker = k
+                break
+            k += 1
+        if end_marker < 0:
+            result.append(text[i:sep + 2])
+            i = sep + 2
+            continue
+        target = text[target_start:end_marker].strip()
+        if not target:
+            result.append(text[i:sep + 2])
+            i = sep + 2
+            continue
+        # 输出 boundary_left 之前原样 + 展开后的括号
+        result.append(text[i:boundary_left])
+        result.append(f"({target}:{weight_val:g})")
+        i = end_marker + 2
+    return "".join(result)
 
 
 def _parse_layer_filter(text, num_blocks):
@@ -399,6 +561,28 @@ def _in_sigma_range(state):
     return lo <= cur <= hi
 
 
+def _in_stabilizer_window(state):
+    """v25: 稳定器生效窗口检测。
+
+    True  = 当前在「稳定期」内，static_capture / anchor_q / EMA 正常生效
+    False = 当前在「动态期」内，缓存类稳定器让位（退化为 v17 行为）
+
+    阈值语义：stabilizer_end_percent=p 会被转成 sigma_p（采样进度 p 对应的 sigma）
+    保存在 stabilizer_min_sigma。sigma 在采样过程中单调下降，
+    “当前 sigma >= sigma_p” 即「进度 <= p」，在稳定期内。
+
+    默认 stabilizer_end_percent=1.0 → sigma_p 是 sigma_min，所以始终返回 True（v24 行为）。
+    未设置阈值时（stabilizer_min_sigma=None）也始终返回 True。
+    """
+    threshold = state.get("stabilizer_min_sigma")
+    if threshold is None:
+        return True
+    cur = state.get("current_sigma")
+    if cur is None:
+        return True  # 拿不到 sigma 则保守处理 = 保持稳定器生效
+    return cur >= threshold
+
+
 class _CrossAttnWrapper(nn.Module):
     def __init__(self, original, shared_state, layer_idx):
         super().__init__()
@@ -423,8 +607,11 @@ class _CrossAttnWrapper(nn.Module):
 
         concat_with_base 路径不经过 artist_total，无意义。
         static_capture=True 时画师 output 已静态，EMA 无对象。
+        v25：动态期（stabilizer 窗口外）跳过 EMA。
         """
         if self._st.get("artist_static_capture", False):
+            return artist_total
+        if not _in_stabilizer_window(self._st):
             return artist_total
         ema_alpha = float(self._st.get("artist_ema_alpha", 0.0))
         ema_compatible = fusion_mode in (FUSION_INTERPOLATE, FUSION_BASE_PRESERVE)
@@ -470,6 +657,12 @@ class _CrossAttnWrapper(nn.Module):
             )
         # static_capture 不支持 concat_with_base（x 每步变，画师 attn 含 base context 也每步变）
         if fusion_mode == FUSION_CONCAT_WITH_BASE:
+            return self._collect_artist_outputs(
+                x, context, rope_emb, t_opts, individuals, fusion_mode
+            )
+        # v25：动态期（stabilizer 窗口外）→ 不走缓存，也不累加，直接返回实时计算。
+        # 注意：不清理 _static_cache——保留稳定期的冻结值（万一跨采样复用）。
+        if not _in_stabilizer_window(st):
             return self._collect_artist_outputs(
                 x, context, rope_emb, t_opts, individuals, fusion_mode
             )
@@ -696,6 +889,7 @@ class _CrossAttnWrapper(nn.Module):
 
         返回值取决于：
         - artist_anchor_q=False / 预跑失败 / 缓存未命中 → 原始 x
+        - v25 动态期（stabilizer 窗口外） → 原始 x
         - Q5: 当前 layer >= anchor_deep_layer_threshold (且 threshold >= 0) → 原始 x
         - Q4: anchor_user_blend > 0 → blend * x + (1-blend) * anchor_x
         - 其他 → anchor_x (v21 默认)
@@ -706,6 +900,9 @@ class _CrossAttnWrapper(nn.Module):
         if not st.get("artist_anchor_q", False):
             return x
         if st.get("_anchor_failed", False):
+            return x
+        # v25: 动态期跳过 anchor，让 step 间变化恢复
+        if not _in_stabilizer_window(st):
             return x
 
         # Q5: 深层切回 user x
@@ -1128,13 +1325,15 @@ class AnimaArtistPack:
                         "\n"
                         "支持两种权重语法（可以共存不互斥）：\n"
                         "  1) 括号语法 (wlop:1.5)——作用于 CLIP 编码层，非线性\n"
-                        "  2) ::weight 语法 ::wlop::1.5——作用于 cross-attn 注入层，线性\n"
+                        "  2) ::weight 语法——作用于 cross-attn 注入层，线性\n"
+                        "     推荐前置写法 (NovelAI 风格可直接复制)： 1.5::wlop\n"
+                        "     仍兼容后置写法： wlop::1.5 或 ::wlop::1.5\n"
                         "\n"
                         "默认 weight=1.0。范围 [0.0, 4.0]。\n"
-                        "::weight 与 括号可以叠加: ::(wlop:1.1)::0.8\n"
+                        "::weight 与 括号可以叠加： 0.8::(wlop:1.1)\n"
                         "\n"
                         "任何画师指定了 ::weight 后，normalize_weights 自动失效\n"
-                        "（尊重用户输入的按重）。"
+                        "（尊重用户输入的权重）。"
                     )
                 }),
             },
@@ -1142,8 +1341,19 @@ class AnimaArtistPack:
                 "base_prompt": ("STRING", {
                     "multiline": True,
                     "default": "",
-                    "tooltip": "主词条（可选）。按 Anima 推荐写法：画师在前，换行后跟主词条，"
-                                "即 '<artist>\\n<base_prompt>'。留空则只编码画师名本身"
+                    "tooltip": (
+                        "主词条（可选）。按 Anima 推荐写法：画师在前，换行后跟主词条，\n"
+                        "即 '<artist>\\n<base_prompt>'。留空则只编码画师名本身。\n"
+                        "\n"
+                        "支持两种权重语法：\n"
+                        "  1) 括号语法 (masterpiece:1.5)——ComfyUI 原生\n"
+                        "  2) ::weight 语法 (v26)：weight::target::\n"
+                        "     例 1.5::masterpiece:: → (masterpiece:1.5)\n"
+                        "     可跨逗号： 1.3::detailed background, intricate:: \n"
+                        "           → (detailed background, intricate:1.3)\n"
+                        "     完全等价于括号语法，只是允许从 NovelAI 风格复制更顺手。\n"
+                        "未闭合的 :: （缺尾部 或 前缀不是数字）会原样传给 CLIP，让你察觉。"
+                    )
                 }),
             },
         }
@@ -1156,7 +1366,13 @@ class AnimaArtistPack:
     def pack(self, clip, artist_chain, base_prompt=""):
         parts = _split_artist_chain(artist_chain)
         names, parsed_weights, has_explicit = _parse_artist_weights(parts)
-        base = (base_prompt or "").strip()
+        # v26: 在编码前展开 base_prompt 中的 'weight::target::' 语法
+        base_raw = (base_prompt or "").strip()
+        base = _expand_prompt_weights(base_raw)
+        if base != base_raw:
+            logger.info(
+                "[AnimaArtistPack] base_prompt 检测到 ::weight 语法，已展开为括号语法传给 CLIP"
+            )
 
         try:
             base_tokens = clip.tokenize(base)
@@ -1349,6 +1565,22 @@ class AnimaArtistOptions:
                         "与 anchor_user_blend 可以叠加：深层切回 user x 后 blend 不再生效。"
                     ),
                 }),
+                "stabilizer_end_percent": ("FLOAT", {
+                    "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.05,
+                    "tooltip": (
+                        "v25：缓存类稳定器（static_capture / anchor_q / EMA）生效窗口。\n"
+                        "采样进度 ≤ 该阈值时生效；超过后自动让位，画师 attn 退化为逐步重算。\n"
+                        "\n"
+                        "1.0: 全程启用稳定器（v24 默认、跨 seed 最稳）\n"
+                        "0.4-0.6: FLS / Foveated 类采样器推荐（前期稳画风、后期让 step 间\n"
+                        "  变化恢复，让采样器的活跃区检测能正常工作）\n"
+                        "0.0: 完全禁用缓存类稳定器（等价全部关掉）\n"
+                        "\n"
+                        "lowrank_avg 不受本参数影响（空间投影不依赖时序）。\n"
+                        "与 start_percent / end_percent 独立：后者控制「注入开关」，本参数控制\n"
+                        "「稳定器开关」。"
+                    ),
+                }),
 
             },
 
@@ -1375,6 +1607,7 @@ class AnimaArtistOptions:
               static_capture_k=_STATIC_CAPTURE_K_DEFAULT, artist_anchor_q=False,
               anchor_seeds_count=1, anchor_user_blend=0.0,
               anchor_deep_layer_threshold=_ANCHOR_LAYER_THRESHOLD_DISABLED,
+              stabilizer_end_percent=1.0,
               layer_filter=""):
         return ({
             "start_block": int(start_block),
@@ -1390,6 +1623,7 @@ class AnimaArtistOptions:
             "anchor_seeds_count": int(anchor_seeds_count),
             "anchor_user_blend": float(anchor_user_blend),
             "anchor_deep_layer_threshold": int(anchor_deep_layer_threshold),
+            "stabilizer_end_percent": float(stabilizer_end_percent),
             "layer_filter": str(layer_filter or ""),
         },)
 
@@ -1472,13 +1706,17 @@ class AnimaArtistCrossAttn:
         anchor_deep_layer_threshold = int(
             adv.get("anchor_deep_layer_threshold", _ANCHOR_LAYER_THRESHOLD_DISABLED)
         )
+        stabilizer_end_percent = float(adv.get("stabilizer_end_percent", 1.0))
+        stabilizer_end_percent = max(0.0, min(1.0, stabilizer_end_percent))
         layer_filter_text = str(adv.get("layer_filter", "") or "")
 
         use_sigma_range = (start_percent > 0.0) or (end_percent < 1.0)
-        # EMA / static_capture / anchor_q 都需要 sigma capture 检测新一次采样
+        use_stabilizer_window = stabilizer_end_percent < 1.0
+        # EMA / static_capture / anchor_q / stabilizer_window 都需要 sigma capture 检测新一次采样
         need_sigma_capture = (
             use_sigma_range or (artist_ema_alpha > 0.0)
             or artist_static_capture or artist_anchor_q
+            or use_stabilizer_window
         )
 
         # 互斥校验
@@ -1635,6 +1873,26 @@ class AnimaArtistCrossAttn:
                 )
                 sigma_range = None
 
+        # v25: stabilizer_end_percent → sigma 阈值
+        # 当 cur_sigma >= stabilizer_min_sigma 时为「稳定期」
+        # stabilizer_end_percent=1.0 → 阈值是 sigma_min（实际不可达）→ 始终在稳定期 = v24 行为
+        stabilizer_min_sigma = None
+        if use_stabilizer_window:
+            try:
+                ms = model.get_model_object("model_sampling")
+                stabilizer_min_sigma = float(ms.percent_to_sigma(stabilizer_end_percent))
+                logger.info(
+                    "[AnimaCrossAttn] stabilizer_end_percent=%.2f → sigma 阈值 %.4f"
+                    "（cur_sigma 低于该值后稳定器让位）",
+                    stabilizer_end_percent, stabilizer_min_sigma,
+                )
+            except Exception as e:
+                logger.warning(
+                    "[AnimaCrossAttn] 解析 stabilizer_end_percent 失败: %s。"
+                    "v25 窗口控制不生效（退化到全程稳定）", e,
+                )
+                stabilizer_min_sigma = None
+
         m = model.clone()
 
         state = {
@@ -1662,6 +1920,7 @@ class AnimaArtistCrossAttn:
             "real_lens": None,
             "dm_ref": dm,
             "sigma_range": sigma_range,
+            "stabilizer_min_sigma": stabilizer_min_sigma,
             "current_sigma": None,
             "_ema_cache": {},
             "_ema_last_sigma": None,
@@ -1697,6 +1956,6 @@ NODE_CLASS_MAPPINGS = {
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "AnimaArtistPack": "Anima Artist Pack (Split + Encode)",
-    "AnimaArtistCrossAttn": "Anima Artist Cross-Attn (v2)",
+    "AnimaArtistCrossAttn": "Anima Artist Cross-Attn (v26)",
     "AnimaArtistOptions": "Anima Artist Options (Advanced)",
 }
