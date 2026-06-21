@@ -1,0 +1,1292 @@
+{
+  "status": "complete",
+  "started_at": "2026-06-21T23:46:38",
+  "updated_at": "2026-06-22T00:42:01",
+  "server": "http://127.0.0.1:8190",
+  "source_workflow": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\source_Anima.Style.Mixer.json",
+  "settings": {
+    "unet": "Anima\\anime\\anima_baseV10.safetensors",
+    "clip": "qwen_3_06b_base.safetensors",
+    "clip_type": "stable_diffusion",
+    "clip_device": "default",
+    "vae": "qwen_image_vae.safetensors",
+    "width": 1024,
+    "height": 1024,
+    "steps": 32,
+    "cfg": 5.0,
+    "sampler_name": "er_sde",
+    "scheduler": "beta",
+    "denoise": 1.0,
+    "seed": 1098716302142360,
+    "source_artist_chain": "@yuchi \\(salmon-1000\\)",
+    "base_prompt": "recent,\n\nAnd image of asuna yuuki and kirigaya suguha, together singing and dancing on stage as idols, dynamic pose.\n\nAsuna is wearing a red and white frilly idol dress. Long hair. White thighhigs. Panty peek. Hair ornament. Holding microphone.\n\nSuguha is wearing a blue and white frilly idol dress. Short hair. White thighhigs. Face, hair, breasts. Panty peek. Hair ornament. Holding microphone.\n\nRed and blue sparkling in the background.",
+    "negative_prompt": "deviantart, score_1, score_2, score_3, low resolution, worst quality, low quality, lowres, bad anatomy, bad hand, extra toes,  jpeg, bad composition, chromatic aberration, censorship"
+  },
+  "model_substitutions": [
+    {
+      "loader": "UNETLoader",
+      "source_name": "anima-base-v1.0.safetensors",
+      "resolved_name": "Anima\\anime\\anima_baseV10.safetensors"
+    }
+  ],
+  "preset_layer_mode": "auto",
+  "preset_summaries": [
+    {
+      "key": "prompt_passthrough",
+      "label": "prompt_passthrough",
+      "combine_mode": "output_avg",
+      "fusion_mode": "interpolate",
+      "strength": 0.0,
+      "layer_mode": "auto",
+      "layer_filter": "",
+      "prompt_passthrough": true,
+      "artist_static_capture": false,
+      "artist_anchor_q": false,
+      "artist_ema_alpha": 0.0,
+      "match_base_norm": false,
+      "mixed_delta_cap": false,
+      "mixed_delta_cap_ratio": 1.0,
+      "compatibility_mode": false
+    },
+    {
+      "key": "balanced",
+      "label": "balanced",
+      "combine_mode": "output_avg",
+      "fusion_mode": "interpolate",
+      "strength": 1.0,
+      "layer_mode": "auto",
+      "layer_filter": "",
+      "prompt_passthrough": false,
+      "artist_static_capture": false,
+      "artist_anchor_q": false,
+      "artist_ema_alpha": 0.0,
+      "match_base_norm": false,
+      "mixed_delta_cap": false,
+      "mixed_delta_cap_ratio": 1.0,
+      "compatibility_mode": false
+    },
+    {
+      "key": "strong_style",
+      "label": "strong_style",
+      "combine_mode": "output_avg",
+      "fusion_mode": "interpolate",
+      "strength": 1.65,
+      "layer_mode": "auto",
+      "layer_filter": "",
+      "prompt_passthrough": false,
+      "artist_static_capture": false,
+      "artist_anchor_q": false,
+      "artist_ema_alpha": 0.2,
+      "match_base_norm": false,
+      "mixed_delta_cap": false,
+      "mixed_delta_cap_ratio": 1.0,
+      "compatibility_mode": false
+    },
+    {
+      "key": "stable_seed",
+      "label": "stable_seed",
+      "combine_mode": "output_avg",
+      "fusion_mode": "interpolate",
+      "strength": 1.0,
+      "layer_mode": "auto",
+      "layer_filter": "9-20",
+      "prompt_passthrough": false,
+      "artist_static_capture": false,
+      "artist_anchor_q": false,
+      "artist_ema_alpha": 0.0,
+      "match_base_norm": false,
+      "mixed_delta_cap": true,
+      "mixed_delta_cap_ratio": 0.75,
+      "compatibility_mode": false
+    },
+    {
+      "key": "drift_auto",
+      "label": "drift_auto",
+      "combine_mode": "output_avg",
+      "fusion_mode": "interpolate",
+      "strength": 0.85,
+      "layer_mode": "auto",
+      "layer_filter": "9-20",
+      "prompt_passthrough": false,
+      "artist_static_capture": false,
+      "artist_anchor_q": false,
+      "artist_ema_alpha": 0.12,
+      "match_base_norm": false,
+      "mixed_delta_cap": false,
+      "mixed_delta_cap_ratio": 1.0,
+      "compatibility_mode": false
+    },
+    {
+      "key": "drift_soft",
+      "label": "drift_soft",
+      "combine_mode": "output_avg",
+      "fusion_mode": "interpolate",
+      "strength": 0.85,
+      "layer_mode": "auto",
+      "layer_filter": "9-20",
+      "prompt_passthrough": false,
+      "artist_static_capture": false,
+      "artist_anchor_q": false,
+      "artist_ema_alpha": 0.12,
+      "match_base_norm": false,
+      "mixed_delta_cap": false,
+      "mixed_delta_cap_ratio": 1.0,
+      "compatibility_mode": false
+    },
+    {
+      "key": "face_lock",
+      "label": "face_lock",
+      "combine_mode": "output_avg",
+      "fusion_mode": "base_preserve",
+      "strength": 0.9,
+      "layer_mode": "auto",
+      "layer_filter": "9-20",
+      "prompt_passthrough": false,
+      "artist_static_capture": false,
+      "artist_anchor_q": false,
+      "artist_ema_alpha": 0.0,
+      "match_base_norm": true,
+      "mixed_delta_cap": true,
+      "mixed_delta_cap_ratio": 1.0,
+      "compatibility_mode": false
+    },
+    {
+      "key": "scene_lock",
+      "label": "scene_lock",
+      "combine_mode": "output_avg",
+      "fusion_mode": "base_preserve",
+      "strength": 0.85,
+      "layer_mode": "auto",
+      "layer_filter": "9-15",
+      "prompt_passthrough": false,
+      "artist_static_capture": false,
+      "artist_anchor_q": false,
+      "artist_ema_alpha": 0.1,
+      "match_base_norm": false,
+      "mixed_delta_cap": false,
+      "mixed_delta_cap_ratio": 1.0,
+      "compatibility_mode": false
+    },
+    {
+      "key": "anchor_lock",
+      "label": "anchor_lock",
+      "combine_mode": "output_avg",
+      "fusion_mode": "interpolate",
+      "strength": 0.9,
+      "layer_mode": "auto",
+      "layer_filter": "9-15",
+      "prompt_passthrough": false,
+      "artist_static_capture": false,
+      "artist_anchor_q": true,
+      "artist_ema_alpha": 0.0,
+      "match_base_norm": false,
+      "mixed_delta_cap": false,
+      "mixed_delta_cap_ratio": 1.0,
+      "compatibility_mode": false
+    },
+    {
+      "key": "fast_preview",
+      "label": "fast_preview",
+      "combine_mode": "concat",
+      "fusion_mode": "concat_with_base",
+      "strength": 1.0,
+      "layer_mode": "auto",
+      "layer_filter": "",
+      "prompt_passthrough": false,
+      "artist_static_capture": false,
+      "artist_anchor_q": false,
+      "artist_ema_alpha": 0.0,
+      "match_base_norm": false,
+      "mixed_delta_cap": false,
+      "mixed_delta_cap_ratio": 1.0,
+      "compatibility_mode": false
+    },
+    {
+      "key": "identity_guard",
+      "label": "identity_guard",
+      "combine_mode": "output_avg",
+      "fusion_mode": "base_preserve",
+      "strength": 0.85,
+      "layer_mode": "auto",
+      "layer_filter": "",
+      "prompt_passthrough": false,
+      "artist_static_capture": false,
+      "artist_anchor_q": false,
+      "artist_ema_alpha": 0.12,
+      "match_base_norm": true,
+      "mixed_delta_cap": true,
+      "mixed_delta_cap_ratio": 0.9,
+      "compatibility_mode": false
+    },
+    {
+      "key": "compatibility_safe",
+      "label": "compatibility_safe",
+      "combine_mode": "concat",
+      "fusion_mode": "concat_with_base",
+      "strength": 1.0,
+      "layer_mode": "auto",
+      "layer_filter": "",
+      "prompt_passthrough": false,
+      "artist_static_capture": false,
+      "artist_anchor_q": false,
+      "artist_ema_alpha": 0.0,
+      "match_base_norm": false,
+      "mixed_delta_cap": false,
+      "mixed_delta_cap_ratio": 1.0,
+      "compatibility_mode": true
+    }
+  ],
+  "columns": [
+    {
+      "key": "no_mixer",
+      "label": "no mixer",
+      "is_preset_column": false
+    },
+    {
+      "key": "prompt_passthrough",
+      "label": "prompt_passthrough",
+      "is_preset_column": true
+    },
+    {
+      "key": "original_mixer",
+      "label": "original mixer",
+      "is_preset_column": false
+    },
+    {
+      "key": "balanced",
+      "label": "balanced",
+      "is_preset_column": true
+    },
+    {
+      "key": "strong_style",
+      "label": "strong_style",
+      "is_preset_column": true
+    },
+    {
+      "key": "stable_seed",
+      "label": "stable_seed",
+      "is_preset_column": true
+    },
+    {
+      "key": "drift_auto",
+      "label": "drift_auto",
+      "is_preset_column": true
+    },
+    {
+      "key": "drift_soft",
+      "label": "drift_soft",
+      "is_preset_column": true
+    },
+    {
+      "key": "face_lock",
+      "label": "face_lock",
+      "is_preset_column": true
+    },
+    {
+      "key": "scene_lock",
+      "label": "scene_lock",
+      "is_preset_column": true
+    },
+    {
+      "key": "anchor_lock",
+      "label": "anchor_lock",
+      "is_preset_column": true
+    },
+    {
+      "key": "fast_preview",
+      "label": "fast_preview",
+      "is_preset_column": true
+    },
+    {
+      "key": "identity_guard",
+      "label": "identity_guard",
+      "is_preset_column": true
+    },
+    {
+      "key": "compatibility_safe",
+      "label": "compatibility_safe",
+      "is_preset_column": true
+    }
+  ],
+  "rows": [
+    {
+      "key": "1_artists",
+      "label": "1 artist",
+      "artist_count": 1,
+      "artist_chain": "@yuchi \\(salmon-1000\\)"
+    },
+    {
+      "key": "2_artists",
+      "label": "2 artists",
+      "artist_count": 2,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan"
+    },
+    {
+      "key": "4_artists",
+      "label": "4 artists",
+      "artist_count": 4,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea"
+    },
+    {
+      "key": "10_artists",
+      "label": "10 artists",
+      "artist_count": 10,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea\n@tsukishiro saika\n@tonee\n@umanosuke\n@hanzou\n@swordsouls\n@kuroi mimei"
+    }
+  ],
+  "results": [
+    {
+      "row_key": "1_artists",
+      "row_label": "1 artist",
+      "artist_count": 1,
+      "artist_chain": "@yuchi \\(salmon-1000\\)",
+      "column_key": "no_mixer",
+      "column_label": "no mixer",
+      "is_preset_column": false,
+      "prompt_id": "0c45abe6-6414-423d-ba87-f7cd4d6d4288",
+      "seconds": 40.26340550000168,
+      "image": {
+        "filename": "xy_preset_matrix_1_artists_no_mixer_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\1_artists__no_mixer.png"
+    },
+    {
+      "row_key": "1_artists",
+      "row_label": "1 artist",
+      "artist_count": 1,
+      "artist_chain": "@yuchi \\(salmon-1000\\)",
+      "column_key": "prompt_passthrough",
+      "column_label": "prompt_passthrough",
+      "is_preset_column": true,
+      "prompt_id": "bc2f3c1e-6358-466e-965f-b78ee9ba84ee",
+      "seconds": 35.14221080000425,
+      "image": {
+        "filename": "xy_preset_matrix_1_artists_prompt_passthrough_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\1_artists__prompt_passthrough.png"
+    },
+    {
+      "row_key": "1_artists",
+      "row_label": "1 artist",
+      "artist_count": 1,
+      "artist_chain": "@yuchi \\(salmon-1000\\)",
+      "column_key": "original_mixer",
+      "column_label": "original mixer",
+      "is_preset_column": false,
+      "prompt_id": "7f381ce8-547f-4d3c-ae04-8448b4316096",
+      "seconds": 41.1782080999983,
+      "image": {
+        "filename": "xy_preset_matrix_1_artists_original_mixer_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\1_artists__original_mixer.png"
+    },
+    {
+      "row_key": "1_artists",
+      "row_label": "1 artist",
+      "artist_count": 1,
+      "artist_chain": "@yuchi \\(salmon-1000\\)",
+      "column_key": "balanced",
+      "column_label": "balanced",
+      "is_preset_column": true,
+      "prompt_id": "d75fad73-34fe-40b0-afea-3bda4fdc8328",
+      "seconds": 35.1233207999976,
+      "image": {
+        "filename": "xy_preset_matrix_1_artists_balanced_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\1_artists__balanced.png"
+    },
+    {
+      "row_key": "1_artists",
+      "row_label": "1 artist",
+      "artist_count": 1,
+      "artist_chain": "@yuchi \\(salmon-1000\\)",
+      "column_key": "strong_style",
+      "column_label": "strong_style",
+      "is_preset_column": true,
+      "prompt_id": "55674e8b-c8e7-47cb-8dc6-580257225cd5",
+      "seconds": 33.08890319999773,
+      "image": {
+        "filename": "xy_preset_matrix_1_artists_strong_style_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\1_artists__strong_style.png"
+    },
+    {
+      "row_key": "1_artists",
+      "row_label": "1 artist",
+      "artist_count": 1,
+      "artist_chain": "@yuchi \\(salmon-1000\\)",
+      "column_key": "stable_seed",
+      "column_label": "stable_seed",
+      "is_preset_column": true,
+      "prompt_id": "7d3f6a07-5aaf-43fb-a12d-45c1cd21413a",
+      "seconds": 35.23970150000241,
+      "image": {
+        "filename": "xy_preset_matrix_1_artists_stable_seed_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\1_artists__stable_seed.png"
+    },
+    {
+      "row_key": "1_artists",
+      "row_label": "1 artist",
+      "artist_count": 1,
+      "artist_chain": "@yuchi \\(salmon-1000\\)",
+      "column_key": "drift_auto",
+      "column_label": "drift_auto",
+      "is_preset_column": true,
+      "prompt_id": "a9e9ffd2-772f-4b5d-b773-4c8f3233074f",
+      "seconds": 35.10858530000405,
+      "image": {
+        "filename": "xy_preset_matrix_1_artists_drift_auto_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\1_artists__drift_auto.png"
+    },
+    {
+      "row_key": "1_artists",
+      "row_label": "1 artist",
+      "artist_count": 1,
+      "artist_chain": "@yuchi \\(salmon-1000\\)",
+      "column_key": "drift_soft",
+      "column_label": "drift_soft",
+      "is_preset_column": true,
+      "prompt_id": "4af041da-733e-436c-a791-f9d23e6a806b",
+      "seconds": 35.13594159999775,
+      "image": {
+        "filename": "xy_preset_matrix_1_artists_drift_soft_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\1_artists__drift_soft.png"
+    },
+    {
+      "row_key": "1_artists",
+      "row_label": "1 artist",
+      "artist_count": 1,
+      "artist_chain": "@yuchi \\(salmon-1000\\)",
+      "column_key": "face_lock",
+      "column_label": "face_lock",
+      "is_preset_column": true,
+      "prompt_id": "9ea06984-1063-4c9e-9a9c-2be41a609d94",
+      "seconds": 37.11401409999962,
+      "image": {
+        "filename": "xy_preset_matrix_1_artists_face_lock_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\1_artists__face_lock.png"
+    },
+    {
+      "row_key": "1_artists",
+      "row_label": "1 artist",
+      "artist_count": 1,
+      "artist_chain": "@yuchi \\(salmon-1000\\)",
+      "column_key": "scene_lock",
+      "column_label": "scene_lock",
+      "is_preset_column": true,
+      "prompt_id": "6cf39ea8-1aca-4a2f-8eb8-8fa03a71a43e",
+      "seconds": 31.092978100001346,
+      "image": {
+        "filename": "xy_preset_matrix_1_artists_scene_lock_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\1_artists__scene_lock.png"
+    },
+    {
+      "row_key": "1_artists",
+      "row_label": "1 artist",
+      "artist_count": 1,
+      "artist_chain": "@yuchi \\(salmon-1000\\)",
+      "column_key": "anchor_lock",
+      "column_label": "anchor_lock",
+      "is_preset_column": true,
+      "prompt_id": "951feb40-85f7-4c36-a21e-e83c12b5b132",
+      "seconds": 32.093488600003184,
+      "image": {
+        "filename": "xy_preset_matrix_1_artists_anchor_lock_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\1_artists__anchor_lock.png"
+    },
+    {
+      "row_key": "1_artists",
+      "row_label": "1 artist",
+      "artist_count": 1,
+      "artist_chain": "@yuchi \\(salmon-1000\\)",
+      "column_key": "fast_preview",
+      "column_label": "fast_preview",
+      "is_preset_column": true,
+      "prompt_id": "069dcee8-0b19-4354-b939-ac03f8505a71",
+      "seconds": 32.13409120000142,
+      "image": {
+        "filename": "xy_preset_matrix_1_artists_fast_preview_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\1_artists__fast_preview.png"
+    },
+    {
+      "row_key": "1_artists",
+      "row_label": "1 artist",
+      "artist_count": 1,
+      "artist_chain": "@yuchi \\(salmon-1000\\)",
+      "column_key": "identity_guard",
+      "column_label": "identity_guard",
+      "is_preset_column": true,
+      "prompt_id": "fd948216-4dad-4fd6-b0e4-8ffc21264182",
+      "seconds": 36.05852869999944,
+      "image": {
+        "filename": "xy_preset_matrix_1_artists_identity_guard_00004_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\1_artists__identity_guard.png"
+    },
+    {
+      "row_key": "1_artists",
+      "row_label": "1 artist",
+      "artist_count": 1,
+      "artist_chain": "@yuchi \\(salmon-1000\\)",
+      "column_key": "compatibility_safe",
+      "column_label": "compatibility_safe",
+      "is_preset_column": true,
+      "prompt_id": "06929dbd-d12f-4b9f-b928-72920eb6228d",
+      "seconds": 27.119035100004112,
+      "image": {
+        "filename": "xy_preset_matrix_1_artists_compatibility_safe_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\1_artists__compatibility_safe.png"
+    },
+    {
+      "row_key": "2_artists",
+      "row_label": "2 artists",
+      "artist_count": 2,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan",
+      "column_key": "no_mixer",
+      "column_label": "no mixer",
+      "is_preset_column": false,
+      "prompt_id": "82ee1acc-5697-4503-a494-9d176b25d167",
+      "seconds": 31.11307549999765,
+      "image": {
+        "filename": "xy_preset_matrix_2_artists_no_mixer_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\2_artists__no_mixer.png"
+    },
+    {
+      "row_key": "2_artists",
+      "row_label": "2 artists",
+      "artist_count": 2,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan",
+      "column_key": "prompt_passthrough",
+      "column_label": "prompt_passthrough",
+      "is_preset_column": true,
+      "prompt_id": "c10099ab-a63e-4eb6-9aa2-cdf86699fa68",
+      "seconds": 33.12000209999678,
+      "image": {
+        "filename": "xy_preset_matrix_2_artists_prompt_passthrough_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\2_artists__prompt_passthrough.png"
+    },
+    {
+      "row_key": "2_artists",
+      "row_label": "2 artists",
+      "artist_count": 2,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan",
+      "column_key": "original_mixer",
+      "column_label": "original mixer",
+      "is_preset_column": false,
+      "prompt_id": "44b48627-6104-431e-8047-b837c4e4e006",
+      "seconds": 44.1567275999987,
+      "image": {
+        "filename": "xy_preset_matrix_2_artists_original_mixer_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\2_artists__original_mixer.png"
+    },
+    {
+      "row_key": "2_artists",
+      "row_label": "2 artists",
+      "artist_count": 2,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan",
+      "column_key": "balanced",
+      "column_label": "balanced",
+      "is_preset_column": true,
+      "prompt_id": "a4a997b2-3adf-4e3b-87a5-819c63826515",
+      "seconds": 43.13684829999693,
+      "image": {
+        "filename": "xy_preset_matrix_2_artists_balanced_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\2_artists__balanced.png"
+    },
+    {
+      "row_key": "2_artists",
+      "row_label": "2 artists",
+      "artist_count": 2,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan",
+      "column_key": "strong_style",
+      "column_label": "strong_style",
+      "is_preset_column": true,
+      "prompt_id": "165874bd-84db-4df8-9b4b-e946dac8164f",
+      "seconds": 42.15445880000334,
+      "image": {
+        "filename": "xy_preset_matrix_2_artists_strong_style_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\2_artists__strong_style.png"
+    },
+    {
+      "row_key": "2_artists",
+      "row_label": "2 artists",
+      "artist_count": 2,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan",
+      "column_key": "stable_seed",
+      "column_label": "stable_seed",
+      "is_preset_column": true,
+      "prompt_id": "0a8f3847-8140-4109-a8d7-402abe1373ef",
+      "seconds": 38.126423599998816,
+      "image": {
+        "filename": "xy_preset_matrix_2_artists_stable_seed_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\2_artists__stable_seed.png"
+    },
+    {
+      "row_key": "2_artists",
+      "row_label": "2 artists",
+      "artist_count": 2,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan",
+      "column_key": "drift_auto",
+      "column_label": "drift_auto",
+      "is_preset_column": true,
+      "prompt_id": "4ab486a1-fab0-4c08-8f06-273bd7d7703a",
+      "seconds": 37.10242869999638,
+      "image": {
+        "filename": "xy_preset_matrix_2_artists_drift_auto_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\2_artists__drift_auto.png"
+    },
+    {
+      "row_key": "2_artists",
+      "row_label": "2 artists",
+      "artist_count": 2,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan",
+      "column_key": "drift_soft",
+      "column_label": "drift_soft",
+      "is_preset_column": true,
+      "prompt_id": "532c9139-557e-4baa-8b40-e1c1281d5c90",
+      "seconds": 37.26135269999941,
+      "image": {
+        "filename": "xy_preset_matrix_2_artists_drift_soft_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\2_artists__drift_soft.png"
+    },
+    {
+      "row_key": "2_artists",
+      "row_label": "2 artists",
+      "artist_count": 2,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan",
+      "column_key": "face_lock",
+      "column_label": "face_lock",
+      "is_preset_column": true,
+      "prompt_id": "8a745a65-de46-47bc-bfcd-a8c3beab47b8",
+      "seconds": 35.108440700001665,
+      "image": {
+        "filename": "xy_preset_matrix_2_artists_face_lock_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\2_artists__face_lock.png"
+    },
+    {
+      "row_key": "2_artists",
+      "row_label": "2 artists",
+      "artist_count": 2,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan",
+      "column_key": "scene_lock",
+      "column_label": "scene_lock",
+      "is_preset_column": true,
+      "prompt_id": "6c170f26-6947-411b-ad6d-b7a93b2fd0f3",
+      "seconds": 28.05909619999875,
+      "image": {
+        "filename": "xy_preset_matrix_2_artists_scene_lock_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\2_artists__scene_lock.png"
+    },
+    {
+      "row_key": "2_artists",
+      "row_label": "2 artists",
+      "artist_count": 2,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan",
+      "column_key": "anchor_lock",
+      "column_label": "anchor_lock",
+      "is_preset_column": true,
+      "prompt_id": "9acbff2d-1a19-40f7-b397-44ff7a252227",
+      "seconds": 29.06588069999998,
+      "image": {
+        "filename": "xy_preset_matrix_2_artists_anchor_lock_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\2_artists__anchor_lock.png"
+    },
+    {
+      "row_key": "2_artists",
+      "row_label": "2 artists",
+      "artist_count": 2,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan",
+      "column_key": "fast_preview",
+      "column_label": "fast_preview",
+      "is_preset_column": true,
+      "prompt_id": "75af9b53-ff25-44af-9d97-1ddb86bffde0",
+      "seconds": 29.132972600003995,
+      "image": {
+        "filename": "xy_preset_matrix_2_artists_fast_preview_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\2_artists__fast_preview.png"
+    },
+    {
+      "row_key": "2_artists",
+      "row_label": "2 artists",
+      "artist_count": 2,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan",
+      "column_key": "identity_guard",
+      "column_label": "identity_guard",
+      "is_preset_column": true,
+      "prompt_id": "7be5058b-20c1-4e63-9873-bf3d8f82fcbe",
+      "seconds": 39.09254250000231,
+      "image": {
+        "filename": "xy_preset_matrix_2_artists_identity_guard_00004_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\2_artists__identity_guard.png"
+    },
+    {
+      "row_key": "2_artists",
+      "row_label": "2 artists",
+      "artist_count": 2,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan",
+      "column_key": "compatibility_safe",
+      "column_label": "compatibility_safe",
+      "is_preset_column": true,
+      "prompt_id": "f1aec9fe-67ba-4c3b-b089-15ce48500378",
+      "seconds": 28.111094099993352,
+      "image": {
+        "filename": "xy_preset_matrix_2_artists_compatibility_safe_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\2_artists__compatibility_safe.png"
+    },
+    {
+      "row_key": "4_artists",
+      "row_label": "4 artists",
+      "artist_count": 4,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea",
+      "column_key": "no_mixer",
+      "column_label": "no mixer",
+      "is_preset_column": false,
+      "prompt_id": "6bcf07f6-a484-49cc-8f24-be97684649f9",
+      "seconds": 26.172502800000075,
+      "image": {
+        "filename": "xy_preset_matrix_4_artists_no_mixer_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\4_artists__no_mixer.png"
+    },
+    {
+      "row_key": "4_artists",
+      "row_label": "4 artists",
+      "artist_count": 4,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea",
+      "column_key": "prompt_passthrough",
+      "column_label": "prompt_passthrough",
+      "is_preset_column": true,
+      "prompt_id": "f0648a95-764d-433a-8782-43c81147808d",
+      "seconds": 27.06077070000174,
+      "image": {
+        "filename": "xy_preset_matrix_4_artists_prompt_passthrough_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\4_artists__prompt_passthrough.png"
+    },
+    {
+      "row_key": "4_artists",
+      "row_label": "4 artists",
+      "artist_count": 4,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea",
+      "column_key": "original_mixer",
+      "column_label": "original mixer",
+      "is_preset_column": false,
+      "prompt_id": "c372cd70-f89c-450f-a1d1-db0e05961a5a",
+      "seconds": 41.15306289999717,
+      "image": {
+        "filename": "xy_preset_matrix_4_artists_original_mixer_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\4_artists__original_mixer.png"
+    },
+    {
+      "row_key": "4_artists",
+      "row_label": "4 artists",
+      "artist_count": 4,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea",
+      "column_key": "balanced",
+      "column_label": "balanced",
+      "is_preset_column": true,
+      "prompt_id": "a2b87b55-ce65-4599-a0aa-eac049d7046f",
+      "seconds": 42.11662670000078,
+      "image": {
+        "filename": "xy_preset_matrix_4_artists_balanced_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\4_artists__balanced.png"
+    },
+    {
+      "row_key": "4_artists",
+      "row_label": "4 artists",
+      "artist_count": 4,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea",
+      "column_key": "strong_style",
+      "column_label": "strong_style",
+      "is_preset_column": true,
+      "prompt_id": "59fba357-17bc-4a6b-a330-ab0858eb3cf0",
+      "seconds": 39.06690539999545,
+      "image": {
+        "filename": "xy_preset_matrix_4_artists_strong_style_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\4_artists__strong_style.png"
+    },
+    {
+      "row_key": "4_artists",
+      "row_label": "4 artists",
+      "artist_count": 4,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea",
+      "column_key": "stable_seed",
+      "column_label": "stable_seed",
+      "is_preset_column": true,
+      "prompt_id": "1412d480-4ca3-4052-a552-6bdfd451c2dd",
+      "seconds": 41.18008610000106,
+      "image": {
+        "filename": "xy_preset_matrix_4_artists_stable_seed_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\4_artists__stable_seed.png"
+    },
+    {
+      "row_key": "4_artists",
+      "row_label": "4 artists",
+      "artist_count": 4,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea",
+      "column_key": "drift_auto",
+      "column_label": "drift_auto",
+      "is_preset_column": true,
+      "prompt_id": "a719fa90-c50d-427c-9de7-db08163e3c65",
+      "seconds": 41.14004850000492,
+      "image": {
+        "filename": "xy_preset_matrix_4_artists_drift_auto_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\4_artists__drift_auto.png"
+    },
+    {
+      "row_key": "4_artists",
+      "row_label": "4 artists",
+      "artist_count": 4,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea",
+      "column_key": "drift_soft",
+      "column_label": "drift_soft",
+      "is_preset_column": true,
+      "prompt_id": "18c0526c-aeae-4c6c-83a9-86441f5a9d11",
+      "seconds": 38.09785760000523,
+      "image": {
+        "filename": "xy_preset_matrix_4_artists_drift_soft_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\4_artists__drift_soft.png"
+    },
+    {
+      "row_key": "4_artists",
+      "row_label": "4 artists",
+      "artist_count": 4,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea",
+      "column_key": "face_lock",
+      "column_label": "face_lock",
+      "is_preset_column": true,
+      "prompt_id": "1bf03bae-7950-495d-8321-7bb507af19d9",
+      "seconds": 35.100145299998985,
+      "image": {
+        "filename": "xy_preset_matrix_4_artists_face_lock_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\4_artists__face_lock.png"
+    },
+    {
+      "row_key": "4_artists",
+      "row_label": "4 artists",
+      "artist_count": 4,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea",
+      "column_key": "scene_lock",
+      "column_label": "scene_lock",
+      "is_preset_column": true,
+      "prompt_id": "7c134b46-83ac-42ce-ac45-a9bb69e17c61",
+      "seconds": 32.08642979999422,
+      "image": {
+        "filename": "xy_preset_matrix_4_artists_scene_lock_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\4_artists__scene_lock.png"
+    },
+    {
+      "row_key": "4_artists",
+      "row_label": "4 artists",
+      "artist_count": 4,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea",
+      "column_key": "anchor_lock",
+      "column_label": "anchor_lock",
+      "is_preset_column": true,
+      "prompt_id": "ee80720a-7126-4c0a-b497-3f298efab646",
+      "seconds": 32.13683320000564,
+      "image": {
+        "filename": "xy_preset_matrix_4_artists_anchor_lock_00002_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\4_artists__anchor_lock.png"
+    },
+    {
+      "row_key": "4_artists",
+      "row_label": "4 artists",
+      "artist_count": 4,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea",
+      "column_key": "fast_preview",
+      "column_label": "fast_preview",
+      "is_preset_column": true,
+      "prompt_id": "41cc4c59-4c9e-44d5-ac2e-13b3f3e95a1e",
+      "seconds": 29.06731359999685,
+      "image": {
+        "filename": "xy_preset_matrix_4_artists_fast_preview_00002_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\4_artists__fast_preview.png"
+    },
+    {
+      "row_key": "4_artists",
+      "row_label": "4 artists",
+      "artist_count": 4,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea",
+      "column_key": "identity_guard",
+      "column_label": "identity_guard",
+      "is_preset_column": true,
+      "prompt_id": "463cf588-13b7-4542-9dc1-22aa482df8dc",
+      "seconds": 49.1277631999983,
+      "image": {
+        "filename": "xy_preset_matrix_4_artists_identity_guard_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\4_artists__identity_guard.png"
+    },
+    {
+      "row_key": "4_artists",
+      "row_label": "4 artists",
+      "artist_count": 4,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea",
+      "column_key": "compatibility_safe",
+      "column_label": "compatibility_safe",
+      "is_preset_column": true,
+      "prompt_id": "f6e42380-1cc7-4e68-8379-6d1290e70034",
+      "seconds": 29.08533239999815,
+      "image": {
+        "filename": "xy_preset_matrix_4_artists_compatibility_safe_00002_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\4_artists__compatibility_safe.png"
+    },
+    {
+      "row_key": "10_artists",
+      "row_label": "10 artists",
+      "artist_count": 10,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea\n@tsukishiro saika\n@tonee\n@umanosuke\n@hanzou\n@swordsouls\n@kuroi mimei",
+      "column_key": "no_mixer",
+      "column_label": "no mixer",
+      "is_preset_column": false,
+      "prompt_id": "ae915532-9f81-4d76-a0a2-c0099602e3e3",
+      "seconds": 27.06268409999757,
+      "image": {
+        "filename": "xy_preset_matrix_10_artists_no_mixer_00002_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\10_artists__no_mixer.png"
+    },
+    {
+      "row_key": "10_artists",
+      "row_label": "10 artists",
+      "artist_count": 10,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea\n@tsukishiro saika\n@tonee\n@umanosuke\n@hanzou\n@swordsouls\n@kuroi mimei",
+      "column_key": "prompt_passthrough",
+      "column_label": "prompt_passthrough",
+      "is_preset_column": true,
+      "prompt_id": "ff6c5b6a-a130-4176-85f1-354e3e1c3c03",
+      "seconds": 27.05927579999843,
+      "image": {
+        "filename": "xy_preset_matrix_10_artists_prompt_passthrough_00002_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\10_artists__prompt_passthrough.png"
+    },
+    {
+      "row_key": "10_artists",
+      "row_label": "10 artists",
+      "artist_count": 10,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea\n@tsukishiro saika\n@tonee\n@umanosuke\n@hanzou\n@swordsouls\n@kuroi mimei",
+      "column_key": "original_mixer",
+      "column_label": "original mixer",
+      "is_preset_column": false,
+      "prompt_id": "3b4871b7-6dde-4862-814e-bb28c46fba5a",
+      "seconds": 64.19893310000043,
+      "image": {
+        "filename": "xy_preset_matrix_10_artists_original_mixer_00002_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\10_artists__original_mixer.png"
+    },
+    {
+      "row_key": "10_artists",
+      "row_label": "10 artists",
+      "artist_count": 10,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea\n@tsukishiro saika\n@tonee\n@umanosuke\n@hanzou\n@swordsouls\n@kuroi mimei",
+      "column_key": "balanced",
+      "column_label": "balanced",
+      "is_preset_column": true,
+      "prompt_id": "046476a5-1fee-4249-b6c6-7e6f4a379ff2",
+      "seconds": 64.15332639999542,
+      "image": {
+        "filename": "xy_preset_matrix_10_artists_balanced_00002_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\10_artists__balanced.png"
+    },
+    {
+      "row_key": "10_artists",
+      "row_label": "10 artists",
+      "artist_count": 10,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea\n@tsukishiro saika\n@tonee\n@umanosuke\n@hanzou\n@swordsouls\n@kuroi mimei",
+      "column_key": "strong_style",
+      "column_label": "strong_style",
+      "is_preset_column": true,
+      "prompt_id": "3c049a2c-d9ed-4cda-a7b6-3e140db153c8",
+      "seconds": 62.18216609999945,
+      "image": {
+        "filename": "xy_preset_matrix_10_artists_strong_style_00002_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\10_artists__strong_style.png"
+    },
+    {
+      "row_key": "10_artists",
+      "row_label": "10 artists",
+      "artist_count": 10,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea\n@tsukishiro saika\n@tonee\n@umanosuke\n@hanzou\n@swordsouls\n@kuroi mimei",
+      "column_key": "stable_seed",
+      "column_label": "stable_seed",
+      "is_preset_column": true,
+      "prompt_id": "697d7fe8-5d9b-4d19-a7e2-dab5ee7c91fb",
+      "seconds": 43.122297199995955,
+      "image": {
+        "filename": "xy_preset_matrix_10_artists_stable_seed_00002_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\10_artists__stable_seed.png"
+    },
+    {
+      "row_key": "10_artists",
+      "row_label": "10 artists",
+      "artist_count": 10,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea\n@tsukishiro saika\n@tonee\n@umanosuke\n@hanzou\n@swordsouls\n@kuroi mimei",
+      "column_key": "drift_auto",
+      "column_label": "drift_auto",
+      "is_preset_column": true,
+      "prompt_id": "cc43c452-1260-4803-84b9-b64612520b40",
+      "seconds": 44.132085000004736,
+      "image": {
+        "filename": "xy_preset_matrix_10_artists_drift_auto_00002_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\10_artists__drift_auto.png"
+    },
+    {
+      "row_key": "10_artists",
+      "row_label": "10 artists",
+      "artist_count": 10,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea\n@tsukishiro saika\n@tonee\n@umanosuke\n@hanzou\n@swordsouls\n@kuroi mimei",
+      "column_key": "drift_soft",
+      "column_label": "drift_soft",
+      "is_preset_column": true,
+      "prompt_id": "ef44193a-4faa-4b57-88ce-902c8c9badbf",
+      "seconds": 52.21843620000436,
+      "image": {
+        "filename": "xy_preset_matrix_10_artists_drift_soft_00002_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\10_artists__drift_soft.png"
+    },
+    {
+      "row_key": "10_artists",
+      "row_label": "10 artists",
+      "artist_count": 10,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea\n@tsukishiro saika\n@tonee\n@umanosuke\n@hanzou\n@swordsouls\n@kuroi mimei",
+      "column_key": "face_lock",
+      "column_label": "face_lock",
+      "is_preset_column": true,
+      "prompt_id": "06c5bcdb-4f9b-4128-b19e-a15dcdd10e93",
+      "seconds": 61.21165469999687,
+      "image": {
+        "filename": "xy_preset_matrix_10_artists_face_lock_00002_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\10_artists__face_lock.png"
+    },
+    {
+      "row_key": "10_artists",
+      "row_label": "10 artists",
+      "artist_count": 10,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea\n@tsukishiro saika\n@tonee\n@umanosuke\n@hanzou\n@swordsouls\n@kuroi mimei",
+      "column_key": "scene_lock",
+      "column_label": "scene_lock",
+      "is_preset_column": true,
+      "prompt_id": "d55e24b2-a5ad-4555-ab46-be841995c31b",
+      "seconds": 45.1235783000011,
+      "image": {
+        "filename": "xy_preset_matrix_10_artists_scene_lock_00002_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\10_artists__scene_lock.png"
+    },
+    {
+      "row_key": "10_artists",
+      "row_label": "10 artists",
+      "artist_count": 10,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea\n@tsukishiro saika\n@tonee\n@umanosuke\n@hanzou\n@swordsouls\n@kuroi mimei",
+      "column_key": "anchor_lock",
+      "column_label": "anchor_lock",
+      "is_preset_column": true,
+      "prompt_id": "dd71fe83-58b2-484e-a6e9-ae5d908757e1",
+      "seconds": 45.13188700000319,
+      "image": {
+        "filename": "xy_preset_matrix_10_artists_anchor_lock_00002_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\10_artists__anchor_lock.png"
+    },
+    {
+      "row_key": "10_artists",
+      "row_label": "10 artists",
+      "artist_count": 10,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea\n@tsukishiro saika\n@tonee\n@umanosuke\n@hanzou\n@swordsouls\n@kuroi mimei",
+      "column_key": "fast_preview",
+      "column_label": "fast_preview",
+      "is_preset_column": true,
+      "prompt_id": "9f4fc22a-0365-4d29-9c5f-dad003ed4969",
+      "seconds": 33.112317999999505,
+      "image": {
+        "filename": "xy_preset_matrix_10_artists_fast_preview_00002_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\10_artists__fast_preview.png"
+    },
+    {
+      "row_key": "10_artists",
+      "row_label": "10 artists",
+      "artist_count": 10,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea\n@tsukishiro saika\n@tonee\n@umanosuke\n@hanzou\n@swordsouls\n@kuroi mimei",
+      "column_key": "identity_guard",
+      "column_label": "identity_guard",
+      "is_preset_column": true,
+      "prompt_id": "aefde1a5-0698-4a03-8f27-e1f435f99d32",
+      "seconds": 76.22056090000115,
+      "image": {
+        "filename": "xy_preset_matrix_10_artists_identity_guard_00003_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\10_artists__identity_guard.png"
+    },
+    {
+      "row_key": "10_artists",
+      "row_label": "10 artists",
+      "artist_count": 10,
+      "artist_chain": "@yuchi \\(salmon-1000\\)\n@momisan\n@toosaka asagi\n@derauea\n@tsukishiro saika\n@tonee\n@umanosuke\n@hanzou\n@swordsouls\n@kuroi mimei",
+      "column_key": "compatibility_safe",
+      "column_label": "compatibility_safe",
+      "is_preset_column": true,
+      "prompt_id": "b8d22a19-a028-4403-aa5c-ab6f240f3918",
+      "seconds": 41.18827700000111,
+      "image": {
+        "filename": "xy_preset_matrix_10_artists_compatibility_safe_00002_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "local_image": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\xy_preset_matrix_cells\\10_artists__compatibility_safe.png"
+    }
+  ],
+  "timing_note": "Seconds are one-run wall time from /prompt submit to history image, including queue/cache/decode overhead."
+}

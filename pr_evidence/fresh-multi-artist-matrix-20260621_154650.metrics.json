@@ -1,0 +1,178 @@
+{
+  "captured_at_local": "20260621_154650",
+  "server": "http://127.0.0.1:8190",
+  "settings": {
+    "width": 512,
+    "height": 512,
+    "steps": 8,
+    "cfg": 5.0,
+    "sampler": "er_sde",
+    "scheduler": "beta",
+    "seed": 42424242,
+    "unet": "Anima\\anime\\anima_baseV10.safetensors",
+    "clip": "qwen_3_06b_base.safetensors",
+    "vae": "qwen_image_vae.safetensors",
+    "base_prompt": "1girl, solo, upper body portrait, face visible, white blouse, navy jacket, looking at viewer, simple background, clean linework, detailed eyes",
+    "negative_prompt": "nsfw, nude, naked, bare chest, cleavage, nipples, cropped head, head out of frame, lowres, worst quality, bad anatomy"
+  },
+  "runs": [
+    {
+      "label": "single_yuchi_prompt",
+      "prompt_id": "dc58bf18-24b1-4068-a274-c0f311f86f8b",
+      "seconds": 3.0645144999998593,
+      "image": {
+        "filename": "anima_pr_fresh_single_yuchi_prompt_prompt_00001_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "image_path": "I:\\ComfyUI-aki-v1.6\\ComfyUI\\output\\anima_pr_fresh_single_yuchi_prompt_prompt_00001_.png",
+      "case": "single_yuchi",
+      "variant": "prompt",
+      "artists": "@yuchi \\(salmon-1000\\)"
+    },
+    {
+      "label": "single_yuchi_balanced",
+      "prompt_id": "7643079f-1278-47d7-a7e2-4f5821b6b2e4",
+      "seconds": 3.0143692999999985,
+      "image": {
+        "filename": "anima_pr_fresh_single_yuchi_balanced_balanced_00001_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "image_path": "I:\\ComfyUI-aki-v1.6\\ComfyUI\\output\\anima_pr_fresh_single_yuchi_balanced_balanced_00001_.png",
+      "case": "single_yuchi",
+      "variant": "balanced",
+      "artists": "@yuchi \\(salmon-1000\\)"
+    },
+    {
+      "label": "single_yuchi_drift_auto",
+      "prompt_id": "e8489556-71ff-4ef9-8f19-a131d5ea353a",
+      "seconds": 4.021750599999905,
+      "image": {
+        "filename": "anima_pr_fresh_single_yuchi_drift_auto_drift_auto_00001_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "image_path": "I:\\ComfyUI-aki-v1.6\\ComfyUI\\output\\anima_pr_fresh_single_yuchi_drift_auto_drift_auto_00001_.png",
+      "case": "single_yuchi",
+      "variant": "drift_auto",
+      "artists": "@yuchi \\(salmon-1000\\)"
+    },
+    {
+      "label": "double_yuchi_uof_prompt",
+      "prompt_id": "50729268-dd6e-41fa-b81a-c5445ab721e9",
+      "seconds": 3.397884900000463,
+      "image": {
+        "filename": "anima_pr_fresh_double_yuchi_uof_prompt_prompt_00001_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "image_path": "I:\\ComfyUI-aki-v1.6\\ComfyUI\\output\\anima_pr_fresh_double_yuchi_uof_prompt_prompt_00001_.png",
+      "case": "double_yuchi_uof",
+      "variant": "prompt",
+      "artists": "@yuchi \\(salmon-1000\\), @uof"
+    },
+    {
+      "label": "double_yuchi_uof_balanced",
+      "prompt_id": "ba888281-2367-412d-ab1b-a2b1f37e2b13",
+      "seconds": 4.060982800000602,
+      "image": {
+        "filename": "anima_pr_fresh_double_yuchi_uof_balanced_balanced_00001_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "image_path": "I:\\ComfyUI-aki-v1.6\\ComfyUI\\output\\anima_pr_fresh_double_yuchi_uof_balanced_balanced_00001_.png",
+      "case": "double_yuchi_uof",
+      "variant": "balanced",
+      "artists": "@yuchi \\(salmon-1000\\), @uof"
+    },
+    {
+      "label": "double_yuchi_uof_drift_auto",
+      "prompt_id": "ce4f4469-31e0-4571-932d-156b725fbf73",
+      "seconds": 4.0552357999995365,
+      "image": {
+        "filename": "anima_pr_fresh_double_yuchi_uof_drift_auto_drift_auto_00001_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "image_path": "I:\\ComfyUI-aki-v1.6\\ComfyUI\\output\\anima_pr_fresh_double_yuchi_uof_drift_auto_drift_auto_00001_.png",
+      "case": "double_yuchi_uof",
+      "variant": "drift_auto",
+      "artists": "@yuchi \\(salmon-1000\\), @uof"
+    },
+    {
+      "label": "multi_yuchi_uof_kieed_ciloranko_prompt",
+      "prompt_id": "ad0a84a1-edf6-47f3-af45-b1b10e7b3b12",
+      "seconds": 3.1647345000001224,
+      "image": {
+        "filename": "anima_pr_fresh_multi_yuchi_uof_kieed_ciloranko_prompt_prompt_00001_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "image_path": "I:\\ComfyUI-aki-v1.6\\ComfyUI\\output\\anima_pr_fresh_multi_yuchi_uof_kieed_ciloranko_prompt_prompt_00001_.png",
+      "case": "multi_yuchi_uof_kieed_ciloranko",
+      "variant": "prompt",
+      "artists": "@yuchi \\(salmon-1000\\), @uof, @kieed, @ciloranko"
+    },
+    {
+      "label": "multi_yuchi_uof_kieed_ciloranko_balanced",
+      "prompt_id": "265fed10-7414-4a97-a75f-68214becdbc1",
+      "seconds": 5.034831699999813,
+      "image": {
+        "filename": "anima_pr_fresh_multi_yuchi_uof_kieed_ciloranko_balanced_balanced_00001_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "image_path": "I:\\ComfyUI-aki-v1.6\\ComfyUI\\output\\anima_pr_fresh_multi_yuchi_uof_kieed_ciloranko_balanced_balanced_00001_.png",
+      "case": "multi_yuchi_uof_kieed_ciloranko",
+      "variant": "balanced",
+      "artists": "@yuchi \\(salmon-1000\\), @uof, @kieed, @ciloranko"
+    },
+    {
+      "label": "multi_yuchi_uof_kieed_ciloranko_drift_auto",
+      "prompt_id": "d81510ce-ed82-4774-993d-a8fc657e7a1f",
+      "seconds": 4.022237500000301,
+      "image": {
+        "filename": "anima_pr_fresh_multi_yuchi_uof_kieed_ciloranko_drift_auto_drift_auto_00001_.png",
+        "subfolder": "",
+        "type": "output"
+      },
+      "image_path": "I:\\ComfyUI-aki-v1.6\\ComfyUI\\output\\anima_pr_fresh_multi_yuchi_uof_kieed_ciloranko_drift_auto_drift_auto_00001_.png",
+      "case": "multi_yuchi_uof_kieed_ciloranko",
+      "variant": "drift_auto",
+      "artists": "@yuchi \\(salmon-1000\\), @uof, @kieed, @ciloranko"
+    }
+  ],
+  "comparisons": {
+    "single_yuchi": {
+      "balanced_vs_prompt_descriptor_distance": 0.09158119896663977,
+      "balanced_vs_prompt_mae": 0.07595913456935509,
+      "balanced_seconds": 3.0143692999999985,
+      "drift_auto_vs_prompt_descriptor_distance": 0.4186236978171867,
+      "drift_auto_vs_prompt_mae": 0.20747848211550246,
+      "drift_auto_seconds": 4.021750599999905,
+      "prompt_seconds": 3.0645144999998593
+    },
+    "double_yuchi_uof": {
+      "balanced_vs_prompt_descriptor_distance": 0.5003334351683532,
+      "balanced_vs_prompt_mae": 0.14982958026960785,
+      "balanced_seconds": 4.060982800000602,
+      "drift_auto_vs_prompt_descriptor_distance": 0.6454461030246943,
+      "drift_auto_vs_prompt_mae": 0.2061184752221201,
+      "drift_auto_seconds": 4.0552357999995365,
+      "prompt_seconds": 3.397884900000463
+    },
+    "multi_yuchi_uof_kieed_ciloranko": {
+      "balanced_vs_prompt_descriptor_distance": 0.6155923853684913,
+      "balanced_vs_prompt_mae": 0.235553352505553,
+      "balanced_seconds": 5.034831699999813,
+      "drift_auto_vs_prompt_descriptor_distance": 0.6685380878951984,
+      "drift_auto_vs_prompt_mae": 0.2595327489516314,
+      "drift_auto_seconds": 4.022237500000301,
+      "prompt_seconds": 3.1647345000001224
+    }
+  },
+  "contact_sheet": "L:\\Antigravitiy code\\comfyui\\Anima-Artist-Mixer\\pr_evidence\\fresh-multi-artist-matrix-20260621_154650.png",
+  "timing_note": "Single run timings include queue, model/cache state, and decode overhead; use them as cost visibility, not proof of speedup.",
+  "average_seconds": 3.7596157333334
+}

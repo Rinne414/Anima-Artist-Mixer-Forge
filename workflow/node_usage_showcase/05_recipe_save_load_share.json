@@ -1,0 +1,122 @@
+{
+  "1": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "Anima\\anime\\anima_baseV10.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "2": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_3_06b_base.safetensors",
+      "type": "stable_diffusion",
+      "device": "default"
+    }
+  },
+  "3": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    }
+  },
+  "4": {
+    "class_type": "AnimaArtistPreset",
+    "inputs": {
+      "preset": "face_lock",
+      "intensity": 1.0,
+      "normalize_weights": true,
+      "layer_mode": "auto",
+      "custom_layer_filter": ""
+    }
+  },
+  "5": {
+    "class_type": "AnimaArtistRecipeSave",
+    "inputs": {
+      "artist_chain": "@yuchi \\(salmon-1000\\), @uof",
+      "combine_mode": "output_avg",
+      "fusion_mode": "interpolate",
+      "strength": 1.0,
+      "preset": ["4", 0],
+      "notes": "Shareable face_lock recipe example."
+    }
+  },
+  "6": {
+    "class_type": "AnimaArtistRecipeLoad",
+    "inputs": {
+      "recipe_json": ["5", 0]
+    }
+  },
+  "7": {
+    "class_type": "AnimaArtistPack",
+    "inputs": {
+      "clip": ["2", 0],
+      "artist_chain": ["6", 0],
+      "base_prompt": "recent, close-up portrait, 1girl, solo, face visible, detailed eyes, soft lighting, simple background"
+    }
+  },
+  "8": {
+    "class_type": "AnimaArtistPresetApply",
+    "inputs": {
+      "model": ["1", 0],
+      "artist_pack": ["7", 0],
+      "preset": ["6", 1],
+      "enabled": true,
+      "apply_to_uncond": false,
+      "advanced_options": ["6", 2]
+    }
+  },
+  "9": {
+    "class_type": "AnimaArtistInspector",
+    "inputs": {
+      "artist_pack": ["7", 0],
+      "preset": ["6", 1],
+      "advanced_options": ["6", 2],
+      "model": ["1", 0]
+    }
+  },
+  "10": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "nsfw, nude, naked, bare chest, cleavage, nipples, cropped head, head out of frame, lowres, worst quality, bad anatomy",
+      "clip": ["2", 0]
+    }
+  },
+  "11": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": 512,
+      "height": 512,
+      "batch_size": 1
+    }
+  },
+  "12": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["8", 0],
+      "positive": ["8", 1],
+      "negative": ["10", 0],
+      "latent_image": ["11", 0],
+      "seed": 55005005,
+      "steps": 8,
+      "cfg": 5.0,
+      "sampler_name": "er_sde",
+      "scheduler": "beta",
+      "denoise": 1.0
+    }
+  },
+  "13": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["12", 0],
+      "vae": ["3", 0]
+    }
+  },
+  "14": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["13", 0],
+      "filename_prefix": "anima_node_usage_05_recipe"
+    }
+  }
+}

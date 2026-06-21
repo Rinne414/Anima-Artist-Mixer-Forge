@@ -30,10 +30,10 @@ def _is_layer_route_segment(text):
     if not s:
         return False
     if "%" in s:
-        s, timing = s.split("%", 1)
-        if not _is_timing_suffix_text(timing):
-            return False
-    return bool(s.strip()) and all(ch in set("0123456789-,， ") for ch in s)
+        layer_text, timing = s.rsplit("%", 1)
+        if _is_timing_suffix_text(timing):
+            s = layer_text
+    return bool(s.strip()) and all(ch in set("0123456789-,， .%") for ch in s)
 
 
 def _comma_continues_layer_route(current_text, next_text):
@@ -43,7 +43,9 @@ def _comma_continues_layer_route(current_text, next_text):
         return False
     tail = cur[at_idx + 1:]
     if "%" in tail:
-        tail = tail.split("%", 1)[0]
+        layer_text, timing = tail.rsplit("%", 1)
+        if _is_timing_suffix_text(timing):
+            tail = layer_text
     if not _is_layer_route_segment(tail):
         return False
     return _is_layer_route_segment(next_text)
@@ -133,6 +135,8 @@ def parse_artist_weights(parts):
             head, _, tail = s.partition("::")
             head_stripped = head.strip()
             tail_stripped = tail.strip()
+            if tail_stripped.endswith("::"):
+                tail_stripped = tail_stripped[:-2].strip()
             if head_stripped and tail_stripped:
                 try:
                     w_val = float(head_stripped)
@@ -183,7 +187,7 @@ def parse_artist_layer_route(name):
     route = route.strip()
     if not route:
         return s, ""
-    allowed = set("0123456789,- ，")
+    allowed = set("0123456789,- ，.%")
     if all(ch in allowed for ch in route):
         base = base.strip()
         if base:
@@ -234,6 +238,71 @@ def parse_artist_timing_routes(names):
     return clean_names, timings
 
 
+def _parse_layer_percent_value(text, has_percent_marker):
+    s = str(text or "").strip()
+    if not s:
+        return None
+    has_suffix = s.endswith("%")
+    if has_suffix:
+        s = s[:-1].strip()
+    if not s:
+        return None
+    try:
+        value = float(s)
+    except ValueError:
+        return None
+    if has_suffix:
+        value /= 100.0
+    elif has_percent_marker and abs(value) > 1.0:
+        value /= 100.0
+    if value < 0.0 or value > 1.0:
+        return None
+    return float(value)
+
+
+def _layer_percent_point_to_block(percent, num_blocks):
+    if num_blocks <= 1:
+        return 0
+    return int(round(clamp_float(percent, 0.0, 1.0) * (num_blocks - 1)))
+
+
+def _layer_percent_window_to_blocks(start, end, num_blocks):
+    if num_blocks <= 1:
+        return 0, 0
+    lo_percent = clamp_float(start, 0.0, 1.0)
+    hi_percent = clamp_float(end, 0.0, 1.0)
+    if lo_percent > hi_percent:
+        lo_percent, hi_percent = hi_percent, lo_percent
+    if abs(hi_percent - lo_percent) <= 1e-8:
+        idx = _layer_percent_point_to_block(lo_percent, num_blocks)
+        return idx, idx
+    lo = int(round(lo_percent * num_blocks))
+    hi = int(round(hi_percent * num_blocks)) - 1
+    lo = max(0, min(num_blocks - 1, lo))
+    hi = max(0, min(num_blocks - 1, hi))
+    if hi < lo:
+        hi = lo
+    return lo, hi
+
+
+def _parse_layer_percent_part(part, num_blocks):
+    has_percent_marker = "%" in str(part or "")
+    if not has_percent_marker and "." not in str(part or ""):
+        return None
+    if "-" in str(part or "")[1:]:
+        dash_idx = str(part).index("-", 1)
+        start = _parse_layer_percent_value(part[:dash_idx], has_percent_marker)
+        end = _parse_layer_percent_value(part[dash_idx + 1:], has_percent_marker)
+        if start is None or end is None:
+            return None
+        lo, hi = _layer_percent_window_to_blocks(start, end, num_blocks)
+        return list(range(lo, hi + 1))
+    percent = _parse_layer_percent_value(part, has_percent_marker)
+    if percent is None:
+        return None
+    return [_layer_percent_point_to_block(percent, num_blocks)]
+
+
 def parse_layer_filter(text, num_blocks):
     """Parse a layer filter like ``0,3,5-10,-1`` into a sorted block list."""
     if not text:
@@ -244,6 +313,10 @@ def parse_layer_filter(text, num_blocks):
     result = set()
     for part in s.split(","):
         if not part:
+            continue
+        percent_blocks = _parse_layer_percent_part(part, num_blocks)
+        if percent_blocks is not None:
+            result.update(percent_blocks)
             continue
         if "-" in part[1:]:
             dash_idx = part.index("-", 1)
@@ -320,6 +393,48 @@ def normalize_weights(weights):
     if total <= 1e-8:
         return [1.0 / len(weights)] * len(weights)
     return [w / total for w in weights]
+
+
+def _format_prompt_weight(value):
+    return f"{float(value):g}"
+
+
+def build_direct_artist_prompt(names, weights, base_prompt):
+    parts = []
+    for idx, name in enumerate(names or []):
+        text = str(name or "").strip()
+        if not text:
+            continue
+        weight = float(weights[idx]) if idx < len(weights or []) else 1.0
+        if weight < 0.0:
+            raise ValueError(
+                "prompt_passthrough does not support negative artist weight; "
+                "negative weights are only available in the cross-attention mixer."
+            )
+        if abs(weight) <= 1e-8:
+            continue
+        if abs(weight - 1.0) <= 1e-8:
+            parts.append(text)
+        else:
+            parts.append(f"({text}:{_format_prompt_weight(weight)})")
+    base = str(base_prompt or "").strip()
+    if base:
+        parts.append(base)
+    return ", ".join(parts)
+
+
+def build_passthrough_prompt(raw_artist_chain, names, weights,
+                             has_explicit_weights, base_prompt):
+    raw = str(raw_artist_chain or "").strip()
+    base = str(base_prompt or "").strip()
+    if raw and not bool(has_explicit_weights):
+        return f"{raw}\n\n{base}" if base else raw
+    artists = build_direct_artist_prompt(names, weights, "")
+    if artists and base:
+        return f"{artists}\n\n{base}"
+    if artists:
+        return artists
+    return base
 
 
 def resolve_artist_layer_routes(route_texts, num_blocks):
@@ -449,4 +564,3 @@ def expand_prompt_weights(text):
         i = end_marker + 2
 
     return "".join(result)
-

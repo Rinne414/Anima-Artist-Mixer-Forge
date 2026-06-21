@@ -1,0 +1,116 @@
+{
+  "1": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "Anima\\anime\\anima_baseV10.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "2": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_3_06b_base.safetensors",
+      "type": "stable_diffusion",
+      "device": "default"
+    }
+  },
+  "3": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    }
+  },
+  "4": {
+    "class_type": "AnimaArtistPack",
+    "inputs": {
+      "clip": ["2", 0],
+      "artist_chain": "1.2::@yuchi \\(salmon-1000\\)::, @uof::0.8",
+      "base_prompt": "recent, 1girl, solo, upper body portrait, white blouse, navy jacket, looking at viewer, simple background, clean linework, detailed eyes"
+    }
+  },
+  "5": {
+    "class_type": "AnimaArtistPreset",
+    "inputs": {
+      "preset": "drift_auto",
+      "intensity": 1.0,
+      "normalize_weights": true,
+      "layer_mode": "auto",
+      "custom_layer_filter": ""
+    }
+  },
+  "6": {
+    "class_type": "AnimaArtistSimpleOptions",
+    "inputs": {
+      "normalize_weights": true,
+      "layer_mode": "style_core",
+      "start_percent": 0.0,
+      "end_percent": 0.75,
+      "custom_layer_filter": "",
+      "compatibility_mode": false
+    }
+  },
+  "7": {
+    "class_type": "AnimaArtistPresetApply",
+    "inputs": {
+      "model": ["1", 0],
+      "artist_pack": ["4", 0],
+      "preset": ["5", 0],
+      "enabled": true,
+      "apply_to_uncond": false,
+      "advanced_options": ["6", 0]
+    }
+  },
+  "8": {
+    "class_type": "AnimaArtistInspector",
+    "inputs": {
+      "artist_pack": ["4", 0],
+      "preset": ["5", 0],
+      "advanced_options": ["6", 0],
+      "model": ["1", 0]
+    }
+  },
+  "9": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "nsfw, nude, naked, bare chest, cleavage, nipples, cropped head, head out of frame, lowres, worst quality, bad anatomy",
+      "clip": ["2", 0]
+    }
+  },
+  "10": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": 512,
+      "height": 512,
+      "batch_size": 1
+    }
+  },
+  "11": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["7", 0],
+      "positive": ["7", 1],
+      "negative": ["9", 0],
+      "latent_image": ["10", 0],
+      "seed": 22002002,
+      "steps": 8,
+      "cfg": 5.0,
+      "sampler_name": "er_sde",
+      "scheduler": "beta",
+      "denoise": 1.0
+    }
+  },
+  "12": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["11", 0],
+      "vae": ["3", 0]
+    }
+  },
+  "13": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["12", 0],
+      "filename_prefix": "anima_node_usage_02_preset_apply"
+    }
+  }
+}

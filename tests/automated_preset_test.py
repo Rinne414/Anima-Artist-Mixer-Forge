@@ -8,7 +8,7 @@ import time
 import requests
 import uuid
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict
 
 # Configuration
 COMFYUI_URL = "http://127.0.0.1:8188"
@@ -98,7 +98,7 @@ def check_comfyui_status():
     try:
         response = requests.get(f"{COMFYUI_URL}/system_stats", timeout=3)
         return response.status_code == 200
-    except:
+    except requests.RequestException:
         return False
 
 
@@ -258,7 +258,7 @@ def run_test(test_id: str, test_config: Dict, template: Dict):
     success, result = wait_for_completion(prompt_id)
 
     if success:
-        print(f"✓ Completed successfully")
+        print("✓ Completed successfully")
         return True
     else:
         print(f"✗ Failed: {result}")

@@ -1,6 +1,4 @@
 """Test v26 syntax enhancements: prefix weight and base_prompt expansion."""
-
-import pytest
 from anima_mixer.parsing import parse_artist_weights, expand_prompt_weights, split_artist_chain
 
 

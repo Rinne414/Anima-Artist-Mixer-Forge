@@ -9,6 +9,16 @@ from .constants import ANCHOR_SEEDS_MAX, ANCHOR_SEEDS_POOL
 logger = logging.getLogger(__name__)
 
 
+def _in_stabilizer_window(state):
+    threshold = state.get("stabilizer_min_sigma")
+    if threshold is None:
+        return True
+    cur = state.get("current_sigma")
+    if cur is None:
+        return True
+    return float(cur) >= float(threshold)
+
+
 def _context_fingerprint(context):
     """Content-based fingerprint for the base context tensor.
 
@@ -70,7 +80,11 @@ def make_sigma_capture(state, prev_wrapper):
         # of a sampling run (sigma jump upward) — the cache key includes the
         # first-step sigma, so checking it again mid-run would miss on every
         # step and re-run the anchor pre-pass each time.
-        if state.get("artist_anchor_q", False) and not state.get("_anchor_failed", False):
+        if (
+            state.get("artist_anchor_q", False)
+            and not state.get("_anchor_failed", False)
+            and _in_stabilizer_window(state)
+        ):
             prev_sigma = state.get("_anchor_last_sigma")
             is_run_start = (
                 prev_sigma is None

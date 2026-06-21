@@ -2,7 +2,6 @@
 
 from .constants import (
     COMBINE_CONCAT,
-    COMBINE_LOWRANK_AVG,
     COMBINE_OUTPUT_AVG,
     FUSION_BASE_PRESERVE,
     FUSION_CONCAT_WITH_BASE,
@@ -26,6 +25,7 @@ from .constants import (
     PRESET_FACE_LOCK,
     PRESET_DRIFT_SOFT,
     PRESET_IDENTITY_GUARD,
+    PRESET_PROMPT_PASSTHROUGH,
     PRESET_SCENE_LOCK,
     PRESET_STABLE_SEED,
     PRESET_STRONG_STYLE,
@@ -77,10 +77,6 @@ def resolve_drift_auto_preset(base_prompt, artist_count=0):
         "background crowd", "crowded background", "background heavy",
         "background-heavy",
     ))
-    street_scene = _prompt_has_any(prompt, (
-        "street scene", "city street", "urban background", "urban scene",
-        "sidewalk",
-    ))
     simple_fullbody = _prompt_has_any(prompt, (
         "fullbody", "full body", "standing pose", "standing",
     )) and _prompt_has_any(prompt, (
@@ -89,17 +85,15 @@ def resolve_drift_auto_preset(base_prompt, artist_count=0):
     ))
 
     if artist_count >= 4 and (wide_scene or background_heavy_scene):
-        return PRESET_FACE_LOCK, "4+ artists wide / background-heavy drift guard"
+        return PRESET_SCENE_LOCK, "4+ artists wide / background-heavy drift guard"
     if wide_scene or background_heavy_scene:
         return PRESET_SCENE_LOCK, "wide or background-heavy scene prompt"
     if artist_count >= 4 and simple_fullbody:
         return PRESET_DRIFT_SOFT, "4+ artists simple fullbody drift guard"
     if artist_count >= 4 and face_score >= 3:
         return PRESET_STABLE_SEED, "4+ artists close-up delta-cap drift guard"
-    if artist_count >= 4 and street_scene:
-        return PRESET_COMPATIBILITY_SAFE, "4+ artists street / urban drift guard"
     if artist_count >= 4:
-        return PRESET_COMPATIBILITY_SAFE_9_15, "4+ artists default portrait / broad-subject 9-15 drift guard"
+        return PRESET_DRIFT_SOFT, "4+ artists default portrait / broad-subject drift guard"
     if face_score >= 3:
         return PRESET_FACE_LOCK, "close-up or face-focused prompt"
     return PRESET_DRIFT_SOFT, "default portrait / broad-subject drift guard"
@@ -123,6 +117,7 @@ def base_advanced_options():
         "anchor_user_blend": 0.0,
         "anchor_deep_layer_threshold": ANCHOR_LAYER_THRESHOLD_DISABLED,
         "anchor_refresh_each_step": False,
+        "stabilizer_end_percent": 1.0,
         "layer_filter": "",
         "compatibility_mode": False,
         "max_batch_artists": 0,
@@ -135,6 +130,7 @@ def base_advanced_options():
         "contribution_balance_alpha": CONTRIB_BALANCE_ALPHA_DEFAULT,
         "mixed_delta_cap": False,
         "mixed_delta_cap_ratio": MIXED_DELTA_CAP_RATIO_DEFAULT,
+        "prompt_passthrough": False,
     }
 
 
@@ -172,14 +168,17 @@ def build_preset_payload(preset_name, intensity=1.0, layer_mode=LAYER_MODE_AUTO,
         adv["artist_ema_alpha"] = 0.0
         adv["match_base_norm"] = False
         payload["strength"] = 1.0
+    elif preset_name == PRESET_PROMPT_PASSTHROUGH:
+        adv["prompt_passthrough"] = True
+        adv["normalize_weights"] = False
+        payload["strength"] = 0.0
     elif preset_name == PRESET_STRONG_STYLE:
         adv["artist_ema_alpha"] = 0.20
         adv["end_percent"] = 0.92
         payload["strength"] = 1.65
     elif preset_name == PRESET_STABLE_SEED:
         adv["lowrank_k"] = 1
-        adv["artist_static_capture"] = True
-        adv["static_capture_k"] = 4
+        adv["artist_static_capture"] = False
         adv["static_capture_mode"] = STATIC_CAPTURE_MODE_OUTPUT
         adv["static_capture_blend_alpha"] = STATIC_CAPTURE_BLEND_ALPHA_DEFAULT
         adv["artist_anchor_q"] = False
@@ -189,6 +188,8 @@ def build_preset_payload(preset_name, intensity=1.0, layer_mode=LAYER_MODE_AUTO,
         adv["match_base_norm"] = False
         adv["anchor_base_norm_ref"] = False
         adv["contribution_balance"] = False
+        adv["mixed_delta_cap"] = True
+        adv["mixed_delta_cap_ratio"] = DRIFT_AUTO_CLOSEUP_DELTA_CAP_RATIO
         if layer_mode == LAYER_MODE_AUTO:
             adv["layer_filter"] = "9-20"
         payload["combine_mode"] = COMBINE_OUTPUT_AVG
@@ -209,8 +210,8 @@ def build_preset_payload(preset_name, intensity=1.0, layer_mode=LAYER_MODE_AUTO,
         payload["strength"] = resolved["strength"]
     elif preset_name == PRESET_DRIFT_SOFT:
         adv["lowrank_k"] = 1
-        adv["artist_static_capture"] = True
-        adv["static_capture_k"] = 4
+        adv["artist_static_capture"] = False
+        adv["artist_ema_alpha"] = 0.12
         adv["static_capture_mode"] = STATIC_CAPTURE_MODE_OUTPUT
         adv["static_capture_blend_alpha"] = STATIC_CAPTURE_BLEND_ALPHA_DEFAULT
         adv["artist_anchor_q"] = False
@@ -226,8 +227,7 @@ def build_preset_payload(preset_name, intensity=1.0, layer_mode=LAYER_MODE_AUTO,
         payload["strength"] = 0.85
     elif preset_name == PRESET_FACE_LOCK:
         adv["lowrank_k"] = 1
-        adv["artist_static_capture"] = True
-        adv["static_capture_k"] = 4
+        adv["artist_static_capture"] = False
         adv["static_capture_mode"] = STATIC_CAPTURE_MODE_OUTPUT
         adv["static_capture_blend_alpha"] = STATIC_CAPTURE_BLEND_ALPHA_DEFAULT
         adv["artist_anchor_q"] = False
@@ -239,15 +239,17 @@ def build_preset_payload(preset_name, intensity=1.0, layer_mode=LAYER_MODE_AUTO,
         adv["norm_lock_mode"] = NORM_LOCK_TOKEN
         adv["norm_lock_scope"] = NORM_LOCK_SCOPE_PER_ARTIST
         adv["contribution_balance"] = False
+        adv["mixed_delta_cap"] = True
+        adv["mixed_delta_cap_ratio"] = 1.0
         if layer_mode == LAYER_MODE_AUTO:
             adv["layer_filter"] = "9-20"
         payload["combine_mode"] = COMBINE_OUTPUT_AVG
         payload["fusion_mode"] = FUSION_BASE_PRESERVE
-        payload["strength"] = 1.0
+        payload["strength"] = 0.9
     elif preset_name == PRESET_SCENE_LOCK:
         adv["lowrank_k"] = 1
-        adv["artist_static_capture"] = True
-        adv["static_capture_k"] = 4
+        adv["artist_static_capture"] = False
+        adv["artist_ema_alpha"] = 0.10
         adv["static_capture_mode"] = STATIC_CAPTURE_MODE_OUTPUT
         adv["static_capture_blend_alpha"] = STATIC_CAPTURE_BLEND_ALPHA_DEFAULT
         adv["artist_anchor_q"] = False
@@ -261,34 +263,37 @@ def build_preset_payload(preset_name, intensity=1.0, layer_mode=LAYER_MODE_AUTO,
             adv["layer_filter"] = "9-15"
         payload["combine_mode"] = COMBINE_OUTPUT_AVG
         payload["fusion_mode"] = FUSION_BASE_PRESERVE
-        payload["strength"] = 1.0
+        payload["strength"] = 0.85
     elif preset_name == PRESET_ANCHOR_LOCK:
         adv["lowrank_k"] = 1
         adv["artist_static_capture"] = False
         adv["static_capture_mode"] = STATIC_CAPTURE_MODE_OUTPUT
         adv["static_capture_blend_alpha"] = STATIC_CAPTURE_BLEND_ALPHA_DEFAULT
         adv["artist_anchor_q"] = True
-        adv["anchor_seeds_count"] = 4
-        adv["anchor_user_blend"] = 0.0
-        adv["anchor_deep_layer_threshold"] = 16
+        adv["anchor_seeds_count"] = 1
+        adv["anchor_user_blend"] = 0.35
+        adv["anchor_deep_layer_threshold"] = 12
         adv["match_base_norm"] = False
         adv["anchor_base_norm_ref"] = False
         adv["contribution_balance"] = False
         if layer_mode == LAYER_MODE_AUTO:
-            adv["layer_filter"] = "9-25"
+            adv["layer_filter"] = "9-15"
         payload["combine_mode"] = COMBINE_OUTPUT_AVG
-        payload["strength"] = 1.2
+        payload["strength"] = 0.9
     elif preset_name == PRESET_FAST_PREVIEW:
         adv["end_percent"] = 0.82
         payload["combine_mode"] = COMBINE_CONCAT
         payload["fusion_mode"] = FUSION_CONCAT_WITH_BASE
         payload["strength"] = 1.0
     elif preset_name == PRESET_IDENTITY_GUARD:
-        adv["artist_ema_alpha"] = 0.35
+        adv["artist_ema_alpha"] = 0.12
         adv["lowrank_k"] = 1
-        payload["combine_mode"] = COMBINE_LOWRANK_AVG
+        adv["match_base_norm"] = True
+        adv["mixed_delta_cap"] = True
+        adv["mixed_delta_cap_ratio"] = 0.9
+        payload["combine_mode"] = COMBINE_OUTPUT_AVG
         payload["fusion_mode"] = FUSION_BASE_PRESERVE
-        payload["strength"] = 1.25
+        payload["strength"] = 0.85
     elif preset_name in (PRESET_COMPATIBILITY_SAFE, PRESET_COMPATIBILITY_SAFE_9_15):
         adv["compatibility_mode"] = True
         if preset_name == PRESET_COMPATIBILITY_SAFE_9_15 and layer_mode == LAYER_MODE_AUTO:

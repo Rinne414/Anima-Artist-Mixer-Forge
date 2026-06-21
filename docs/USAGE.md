@@ -105,21 +105,21 @@ Restart ComfyUI. No extra dependencies.
 ![workflow](docs/images/workflow.png)
 
 ```
-                          ┌──► artist_pack ──► AnimaArtistCrossAttn ──► MODEL ──► KSampler
-[Load CLIP] ─► CLIP ──────┤                              │                          │
-                          │                              └──► base_prompt ──► (positive)
+                          ┌──► artist_pack ──► AnimaArtistPresetApply ──► MODEL ──► KSampler
+[Load CLIP] ─► CLIP ──────┤                                   │                          │
+                          │                                   └──► base_prompt ──► (positive)
                           │
                           └──► CLIPTextEncode (Negative) ──► (negative)
 
-[Load Anima Model] ──► MODEL ──► AnimaArtistCrossAttn
+[Load Anima Model] ──► MODEL ──► AnimaArtistPresetApply
 
 (optional) AnimaArtistChainBuilder ──► artist_chain ──► AnimaArtistPack
 (optional) AnimaArtistChainPreview ──► cleaned_chain / syntax report
 (optional) AnimaArtistStarter ───────► artist_chain ──► AnimaArtistPack
-                                  └──► preset / advanced_options ──► AnimaArtistCrossAttn
-(optional) AnimaArtistPreset  ──► preset ────────────► AnimaArtistCrossAttn
-(optional) AnimaArtistSimpleOptions ─► advanced_options ─► AnimaArtistCrossAttn
-(optional) AnimaArtistOptions (Expert) ─► advanced_options ─► AnimaArtistCrossAttn
+                                  └──► preset / advanced_options ──► AnimaArtistPresetApply
+(optional) AnimaArtistPreset  ──► preset ────────────► AnimaArtistPresetApply
+(optional) AnimaArtistSimpleOptions ─► advanced_options ─► AnimaArtistPresetApply
+(optional) AnimaArtistOptions (Expert) ─► advanced_options ─► AnimaArtistPresetApply
 (optional) AnimaArtistInspector ◄── artist_pack / preset / advanced_options
 ```
 
@@ -128,13 +128,18 @@ for a complete importable example. It keeps the generation and output nodes
 in place so users can load it directly and see how the Anima nodes fit into a
 real graph.
 
+Open [`../workflow/artist-layer-role-routing.json`](<../workflow/artist-layer-role-routing.json>)
+for a focused character / clothing / background routing example. It maps
+three separate artists to early, middle, and late layer windows from one
+`AnimaArtistPack`.
+
 Key points:
 - Fastest guided builder: use `AnimaArtistStarter`, fill `artist_table`, select a recipe, then follow its in-UI wiring guide
 - Use `AnimaArtistChainBuilder` for the fastest safe setup: enter a few artists in the shortcut rows or many artists in `artist_table`, pick a layout, then connect its `artist_chain` output into `AnimaArtistPack`
 - Use `AnimaArtistChainPreview` when hand-writing chains; it catches syntax mistakes before CLIP encoding
 - Write your artist chain in `AnimaArtistPack`'s top text box (comma or newline separated)
 - Write your main prompt in the bottom text box
-- Connect `AnimaArtistCrossAttn`'s `base_prompt` output directly to KSampler's positive input
+- Connect `AnimaArtistPresetApply`'s `base_prompt` output directly to KSampler's positive input
 - Encode the negative prompt independently with `CLIPTextEncode`; it does not go through this plugin
 - Start with `AnimaArtistPreset(preset=balanced)` unless you already know which advanced settings you want
 - Use `AnimaArtistPreset(preset=compatibility_safe)` first when combining with regional prompts, Forge Couple-style routing, attention masks, or other cross-attention patch nodes
@@ -148,8 +153,8 @@ Key points:
 This is the lowest-friction entry point. It combines the common `ChainBuilder + Preset` setup into one helper node and outputs:
 
 - `artist_chain` for `AnimaArtistPack.artist_chain`
-- `preset` for `AnimaArtistCrossAttn.preset`
-- `advanced_options` for `AnimaArtistCrossAttn.advanced_options` when you want the explicit option payload
+- `preset` for `AnimaArtistPresetApply.preset`
+- `advanced_options` for `AnimaArtistPresetApply.advanced_options` when you want the explicit option payload
 - an in-UI `guide` with status, wiring steps, preset summary, chain preview, and warnings
 
 Use `artist_table` as one artist per line:
@@ -165,6 +170,7 @@ Only the artist column is required. Bad weights are not silently swallowed; the 
 
 | Recipe | Best use |
 |---|---|
+| `prompt_passthrough` | Direct prompt/no-mixer parity while keeping positive artist weight syntax |
 | `balanced` | Default first run |
 | `strong_style` | Stronger visual style |
 | `stable_seed` | Same prompt across many seeds |
@@ -238,14 +244,33 @@ It does not need CLIP or a model. Use it before `AnimaArtistPack` when experimen
 | Parameter | Type | Description |
 |---|---|---|
 | `clip` | CLIP | Anima-compatible CLIP |
-| `artist_chain` | STRING (multiline) | Artist chain. Comma or newline separated. Supports CLIP weighting `(wlop:1.2)`, injection-layer weight `::wlop::1.5`, per-artist layer routing `@0-8`, and per-artist timing `%0.0-0.45` |
+| `artist_chain` | STRING (multiline) | Artist chain. Comma or newline separated. Supports CLIP weighting `(wlop:1.2)`, injection-layer weight `::wlop::1.5`, per-artist layer routing `@0-8` / `@33%-67%` / `@0.33-0.67`, and per-artist timing `%0.0-0.45` |
 | `base_prompt` | STRING (multiline, optional) | Main prompt. Leave empty to encode artists alone |
 
 Outputs `ANIMA_PACK`, an internal struct holding each artist's separately-encoded conditioning, the artist label list, the parsed per-artist weights, and a separately-encoded conditioning for the bare base prompt.
 
 How it works internally: the node splits `artist_chain` into N artist names, parses any `::name::weight` syntax to extract per-artist injection weights (which are stripped before CLIP encoding), and encodes each as `<artist_name>\n<base_prompt>` (Anima's recommended format: artist first, newline, then main prompt). It also encodes a clean copy of `base_prompt` alone for use as KSampler's positive conditioning.
 
-### AnimaArtistCrossAttn (main node)
+### AnimaArtistPresetApply (preset node)
+
+Use this node for preset workflows. It takes `model`, `artist_pack`, and a `preset` payload, then applies the preset-owned `combine_mode`, `fusion_mode`, and `strength` without exposing manual widgets that would be ignored.
+
+| Parameter | Type | Description |
+|---|---|---|
+| `model` | MODEL | Anima model |
+| `artist_pack` | ANIMA_PACK | Output from `AnimaArtistPack` |
+| `preset` | ANIMA_PRESET | Output from `AnimaArtistPreset`, `AnimaArtistStarter`, or `AnimaArtistRecipeLoad` |
+| `enabled` | BOOLEAN | Master switch |
+| `apply_to_uncond` | BOOLEAN | Default False, **not recommended** (breaks CFG) |
+| `advanced_options` | ANIMA_OPTS | Optional detailed override payload |
+
+Outputs:
+- `model`: model with the preset's artist mixing behavior applied. Connect to KSampler's `model` input
+- `base_prompt`: the bare base-prompt conditioning from `artist_pack`. Connect to KSampler's positive input
+
+### AnimaArtistCrossAttn (Manual/Advanced)
+
+Use this node only when you want to set `combine_mode`, `fusion_mode`, and `strength` by hand. Its optional `preset` input remains available so old saved workflows continue to load, but new preset workflows should use `AnimaArtistPresetApply`.
 
 | Parameter | Type | Description |
 |---|---|---|
@@ -257,7 +282,7 @@ How it works internally: the node splits `artist_chain` into N artist names, par
 | `enabled` | BOOLEAN | Master switch |
 | `apply_to_uncond` | BOOLEAN | Default False, **not recommended** (breaks CFG) |
 | `advanced_options` | ANIMA_OPTS | Optional advanced controls |
-| `preset` | ANIMA_PRESET | Optional one-click preset. When connected, it overrides `combine_mode`, `fusion_mode`, `strength`, then `advanced_options` can still override detailed options |
+| `preset` | ANIMA_PRESET | Compatibility input for old workflows. When connected, it overrides the visible manual fields; use `AnimaArtistPresetApply` for new preset workflows |
 
 Outputs:
 - `model`: model with artist mixing patched in. Connect to KSampler's `model` input
@@ -265,35 +290,36 @@ Outputs:
 
 ### AnimaArtistPreset (one-click helper)
 
-This is the one-click preset helper. Start with `balanced` for predictable artist mixing; choose `drift_auto` only when you explicitly want automatic low-drift routing.
+This is the one-click preset helper. Start with `balanced` for predictable artist mixing; choose `drift_auto` only when you explicitly want automatic low-drift routing. Use `prompt_passthrough` when you want the same result as putting the artist tags directly in the positive prompt, with no attention patch.
 
 | Preset | What it does |
 |---|---|
+| `prompt_passthrough` | No mixer path. Builds a direct prompt from the artist chain and base prompt, converts positive artist weights to normal prompt weights like `(@artist:1.2)`, and returns the unpatched model |
 | `balanced` | `output_avg + interpolate`, original-style default with EMA and norm-lock off |
 | `strong_style` | Stronger style amplification with controlled extrapolation |
-| `stable_seed` | `output_avg + static_capture K=4 + no_norm + strength 1.0 + auto layers 9-20`, content-safer cross-seed stability |
-| `drift_auto` | Runtime route to `drift_soft`, `stable_seed`, `face_lock`, `scene_lock`, `compatibility_safe`, or the internal `compatibility_safe_9_15` route from `AnimaArtistPack.base_prompt` and artist count; Inspector reports the resolved preset and reason |
-| `drift_soft` | `stable_seed` path with `strength 0.85`, softer portrait / broad-subject drift control |
-| `face_lock` | `stable_seed` static-capture path with token/per-artist norm lock and `base_preserve`, tuned for close-up faces |
-| `scene_lock` | `output_avg + base_preserve + static_capture K=4 + no_norm + auto layers 9-15`, tuned for explicit wide / background-heavy scenes |
-| `anchor_lock` | Legacy stronger `output_avg + anchor_q + 4seed + no_norm + strength 1.2 + auto layers 9-25 + user-Q handoff at L16` |
+| `stable_seed` | `output_avg + mixed_delta_cap ratio 0.75 + strength 1.0 + auto layers 9-20`, content-safer cross-seed stability without static-capture freeze |
+| `drift_auto` | Runtime route to `drift_soft`, `stable_seed`, `face_lock`, or `scene_lock` from `AnimaArtistPack.base_prompt` and artist count; Inspector reports the resolved preset and reason |
+| `drift_soft` | `output_avg + light EMA + strength 0.85 + auto layers 9-20`, softer portrait / broad-subject drift control |
+| `face_lock` | `output_avg + base_preserve + token/per-artist norm lock + mixed_delta_cap`, tuned for close-up faces |
+| `scene_lock` | `output_avg + base_preserve + light EMA + strength 0.85 + auto layers 9-15`, tuned for explicit wide / background-heavy scenes |
+| `anchor_lock` | Softer `output_avg + anchor_q + 1 seed + user blend 0.35 + strength 0.9 + auto layers 9-15` |
 | `fast_preview` | `concat + concat_with_base`, fastest preview path, less precise mixing |
-| `identity_guard` | `lowrank_avg + base_preserve`, protects prompt identity/composition |
+| `identity_guard` | `output_avg + base_preserve + norm lock + mixed_delta_cap`, protects prompt identity/composition without the very slow low-rank path |
 | `compatibility_safe` | `concat + concat_with_base`, disables EMA/static/anchor paths, best first check when other nodes also patch attention |
 
-`intensity` scales the preset's strength except for `fast_preview` and `compatibility_safe`, whose concat paths do not use strength.
+`prompt_passthrough` supports positive artist weights only. Mixer-only controls such as negative style subtraction, per-artist layer routes, and per-artist timing routes require a real mixer preset such as `balanced`. `intensity` scales the preset's strength except for `fast_preview`, `compatibility_safe`, and `prompt_passthrough`, whose paths do not use mixer strength.
 
 `layer_mode` gives fast layer targeting:
 
 | layer_mode | Behavior |
 |---|---|
-| `auto` | Preset-specific default (`stable_seed`, `drift_soft`, and `face_lock` use `9-20`; `scene_lock` uses `9-15`; `anchor_lock` uses `9-25`) |
+| `auto` | Preset-specific default (`stable_seed`, `drift_soft`, and `face_lock` use `9-20`; `scene_lock` and `anchor_lock` use `9-15`) |
 | `all_layers` | All layers |
 | `style_core` | `0-18`, stronger global style control |
 | `detail_layers` | `12-63`, more detail/brushwork focused |
 | `custom` | Uses `custom_layer_filter` |
 
-When both `preset` and `advanced_options` are connected to `AnimaArtistCrossAttn`, the preset fills the base configuration and `advanced_options` overrides the detailed fields.
+When both `preset` and `advanced_options` are connected to `AnimaArtistPresetApply`, the preset fills the base configuration and `advanced_options` overrides the detailed fields.
 
 ### AnimaArtistSimpleOptions (simple)
 
@@ -307,11 +333,11 @@ Use this node for common tweaks without opening the full expert panel.
 | `custom_layer_filter` | Used only when `layer_mode=custom`. Example: `"0,3,5-10,-1"` |
 | `compatibility_mode` | Forces the safer concat path when regional prompts or other attention patchers conflict |
 
-It outputs the same `ANIMA_OPTS` type as the expert node, so wire it to `AnimaArtistCrossAttn.advanced_options`.
+It outputs the same `ANIMA_OPTS` type as the expert node, so wire it to `AnimaArtistPresetApply.advanced_options`.
 
 ### AnimaArtistInspector (UI report)
 
-Connect `artist_pack`, and optionally the same `preset` / `advanced_options` used by `AnimaArtistCrossAttn`. If you are not using presets, set Inspector's `combine_mode`, `fusion_mode`, and `strength` to match the CrossAttn node. It prints:
+Connect `artist_pack`, and optionally the same `preset` / `advanced_options` used by `AnimaArtistPresetApply`. If you are not using presets, set Inspector's `combine_mode`, `fusion_mode`, and `strength` to match the manual CrossAttn node. It prints:
 
 - parsed artist labels
 - parsed linear `::weight` values
@@ -343,6 +369,7 @@ Not connecting this node = default behavior. Prefer `AnimaArtistSimpleOptions` f
 | `anchor_seeds_count` | Number of anchor seeds to average. Default 1, range 1~4 |
 | `anchor_user_blend` | Blend ratio between anchor Q and user Q. 0 = pure anchor, 1 = pure user |
 | `anchor_deep_layer_threshold` | Use anchor for shallow layers `[0, N)`, user Q for deep layers `[N, end]`. -1 disables |
+| `stabilizer_end_percent` | End point for cache-based stabilizers. `1.0` = whole sampling pass; `0.4-0.6` lets EMA/static/anchor yield during later dynamic steps |
 | `anchor_base_norm_ref` (v26) | Optional A/B path for `anchor_q + match_base_norm`; uses the fixed anchor's base output as the norm reference instead of the current seed's base output. Not the measured default |
 | `anchor_refresh_each_step` (v26) | Rebuild the fixed-seed anchor at every sampling step instead of only the first step. Slow A/B option; live checks did not beat the cached anchor path |
 | `compatibility_mode` | Forces `concat + concat_with_base`, disables EMA/static/anchor stabilizers, and reduces conflict risk with regional/attention-patching nodes |
@@ -361,7 +388,7 @@ Not connecting this node = default behavior. Prefer `AnimaArtistSimpleOptions` f
 `AnimaArtistRecipeSave` merges the effective configuration (UI values + optional preset + optional advanced options) and packs it together with the artist chain into one JSON string. `AnimaArtistRecipeLoad` parses that JSON back into:
 
 - `artist_chain` → wire to `AnimaArtistPack.artist_chain`
-- `preset` (carries combine/fusion/strength/options) → wire to `AnimaArtistCrossAttn.preset`
+- `preset` (carries combine/fusion/strength/options) -> wire to `AnimaArtistPresetApply.preset`
 - `advanced_options` → optional explicit payload
 
 Unknown fields are ignored with warnings, so recipes stay loadable across versions. The JSON is paste-friendly — share exact mixes in a Discord message.
@@ -460,6 +487,8 @@ The base direction is left untouched; the artist can only add a sideways offset.
 
 Norm locking is off by default so `balanced` stays close to the original mixer. Enable stabilizers progressively from light to heavy.
 
+`stabilizer_end_percent` limits only cache-based stabilizers: `artist_ema_alpha`, `artist_static_capture`, and `artist_anchor_q`. Keep it at `1.0` for the original full-pass behavior. Set it around `0.4-0.6` when a late-step sampler or post-processing workflow needs the artist attention to resume normal per-step motion after the early style direction is established.
+
 ### match_base_norm + norm lock (optional)
 
 The weighted artist output can have a different activation energy from the base attention output expected by downstream blocks. That mismatch can compound across layers and show up as seed-dependent style-strength swings: one seed looks washed out, another overpowered, another balanced.
@@ -542,8 +571,8 @@ Mutually exclusive with `artist_static_capture` (anchor takes priority, with a w
 
 ### stable_seed (opt-in)
 
-The current `stable_seed` preset uses `output_avg + artist_static_capture + static_capture_k=4 + match_base_norm=False + strength=1.0 + layer_filter=9-20` when `layer_mode=auto`.
-Live A/B favored this static-capture layer window over the stronger anchor-Q default for mixed portrait / close-up / street checks because it lowered foreground descriptor drift without the face, clothing, and full-layer smear failures seen in anchor-heavy runs. Use `anchor_lock` if you explicitly want the older stronger 4-anchor Q behavior.
+The current `stable_seed` preset uses `output_avg + mixed_delta_cap + mixed_delta_cap_ratio=0.75 + match_base_norm=False + strength=1.0 + layer_filter=9-20` when `layer_mode=auto`.
+This keeps the real style-mixer path active while capping extreme mixed deltas. It avoids the static-capture freeze that can make multi-artist results look washed out or collapse artist differences.
 
 `static_capture_mode` is an advanced A/B control, not a default tuning knob. `output` is the measured default. `delta` preserves current base motion more directly, `blend` interpolates between the frozen output and delta path, and `blend_perp` only reintroduces base motion that is perpendicular to the frozen style delta. In live checks, `blend_perp` helped on street prompts but did not hold the same advantage on portrait and close-up prompts, so it stays experimental.
 
@@ -553,10 +582,10 @@ There is no single low-drift setting that wins across every prompt shape. Keep `
 
 | Preset | Use when | Difference from `stable_seed` |
 |---|---|---|
-| `drift_auto` | You want the node to pick the common low-drift route from `base_prompt` and artist count | resolves at runtime to `drift_soft`, `stable_seed`, `face_lock`, `scene_lock`, `compatibility_safe`, or the internal `compatibility_safe_9_15` route and reports the reason in Inspector. 4+ artist wide / background-heavy prompts use `face_lock` after live A/B found it had the lowest average regret; smaller explicit wide / background-heavy prompts use `scene_lock`; 4+ artist simple fullbody prompts use `drift_soft`; 4+ artist close-ups use `stable_seed` plus `mixed_delta_cap_ratio=0.75` after live A/B lowered the worst seed-pair regret; 4+ artist street / urban prompts use full-layer `compatibility_safe`; other 4+ artist portrait / broad-subject prompts use `compatibility_safe_9_15` after live A/B made foreground, full, center, and upper-center reductions all positive; smaller close-up prompts can still use `face_lock` |
-| `drift_soft` | Portrait or broad-subject prompts where full strength changes the look too much | lowers strength to `0.85` |
-| `face_lock` | Close-up faces where identity / facial detail shifts between seeds | turns token/per-artist `match_base_norm` on and uses `base_preserve` fusion |
-| `scene_lock` | Explicit wide-shot, small-figure, cityscape, landscape, or background-heavy prompts where composition should stay in charge | switches fusion to `base_preserve` and narrows auto layers to `9-15` |
+| `drift_auto` | You want the node to pick the common low-drift route from `base_prompt` and artist count | resolves at runtime to `drift_soft`, `stable_seed`, `face_lock`, or `scene_lock` and reports the reason in Inspector. 4+ artist broad prompts stay on mixer presets instead of compatibility concat, so 4-artist and 10-artist inputs remain style-controllable |
+| `drift_soft` | Portrait or broad-subject prompts where full strength changes the look too much | lowers strength to `0.85` and adds light EMA without static capture |
+| `face_lock` | Close-up faces where identity / facial detail shifts between seeds | turns token/per-artist `match_base_norm` on, uses `base_preserve`, and caps the mixed delta |
+| `scene_lock` | Explicit wide-shot, small-figure, cityscape, landscape, or background-heavy prompts where composition should stay in charge | switches fusion to `base_preserve`, adds light EMA, and narrows auto layers to `9-15` |
 
 These presets are inference-time controls, not training. They reduce measured descriptor drift in the prompt types they target, but they should still be checked with your actual artist set and prompt because artist tags can carry composition and subject bias as well as style.
 
@@ -571,10 +600,10 @@ In v26, use `AnimaArtistStarter` for new workflows, or `AnimaArtistPreset` when 
 | same prompt across many seeds | `stable_seed` |
 | lower drift without hand-picking the scene type | `drift_auto` |
 | portrait / broad subject with lower drift | `drift_soft` |
-| 4+ artist plain portrait / street with lower average regret | `drift_auto` (`compatibility_safe_9_15` for plain portrait, `compatibility_safe` for street / urban) |
+| 4+ artist plain portrait / street with lower drift while preserving style control | `drift_auto` (`drift_soft` route) |
 | close-up faces with lower drift | `face_lock` |
 | explicit wide / background-heavy scenes with lower drift | `scene_lock` |
-| stronger fixed-anchor seed lock | `anchor_lock` |
+| softer fixed-anchor seed lock | `anchor_lock` |
 | fast exploration | `fast_preview` |
 | preserve character/object identity | `identity_guard` |
 | regional prompts / other attention patchers | `compatibility_safe` |
@@ -715,14 +744,16 @@ wlop@0-8
 ::(krenz:1.1)::0.8@19-27
 ```
 
-Artist tags that already start with `@` still work. For example, `@wlop` is treated as the artist name, while `@wlop@0-8` means artist `@wlop` routed to blocks `0-8`. The parser only treats the final `@...` segment as a route when it contains layer-filter characters (`0-9`, comma, dash, spaces, or Chinese comma).
+Artist tags that already start with `@` still work. For example, `@wlop` is treated as the artist name, while `@wlop@0-8` means artist `@wlop` routed to blocks `0-8`. The parser only treats the final `@...` segment as a route when it contains layer-filter characters (`0-9`, comma, dash, decimal point, percent sign, spaces, or Chinese comma).
 
-Layer filters use the same syntax as `AnimaArtistOptions.layer_filter`: comma-separated indices, ranges, and negative indices. Examples:
+Layer filters use the same syntax as `AnimaArtistOptions.layer_filter`: comma-separated indices, ranges, and negative indices. They also accept layer-percent windows. Use `0%-33%` / `33%-67%` / `67%-100%` when you want model-independent windows, or normalized decimals like `0.33-0.67` when combining with sampling timing. Examples:
 
 ```
 0-8
 9,12,15
 14-27,-1
+0%-33%
+0.33-0.67
 ```
 
 Comma-separated layer routes are kept inside the artist entry, so `wlop@0,2,4, hiten` parses as two artists: `wlop` routed to blocks `0,2,4`, then `hiten`. Newlines always split artists and are the clearest format for complex chains.
@@ -732,6 +763,15 @@ This solves the "different artists mixed into different layers" workflow:
 - early blocks (`0-8`): composition and global style
 - middle blocks (`9-18`): character/body/shape bias
 - late blocks (`19-27`): details, finish, brushwork
+
+For the GitHub-requested character / clothing / background split, use one
+artist per role:
+
+```
+@background_artist@0%-33%
+@character_artist@0.33-0.67
+@clothing_artist@67%-100%
+```
 
 If a layer has no matching artist after routing, that layer falls back to the original cross-attention. Global `layer_filter` still applies first: the node only patches the selected global layers, then per-artist routes decide which artists participate inside those patched layers.
 
@@ -751,6 +791,7 @@ Layer routing and timing can be combined. Put layer routing first, timing last:
 wlop@0-8%0.0-0.45
 ::krenz::1.2@9-18%0.35-0.85
 hiten@19-27%0.65-1.0
+@background_artist@0.00-0.33%0.0-0.45
 ```
 
 The timing range is normalized sampling progress:

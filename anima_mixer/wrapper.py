@@ -120,6 +120,16 @@ def _static_capture_values_to_cache(mode, outs, base_out):
     return outs
 
 
+def _in_stabilizer_window(state):
+    threshold = state.get("stabilizer_min_sigma")
+    if threshold is None:
+        return True
+    cur = state.get("current_sigma")
+    if cur is None:
+        return True
+    return float(cur) >= float(threshold)
+
+
 class CrossAttnWrapper(nn.Module):
     def __init__(self, original, shared_state, layer_idx):
         super().__init__()
@@ -148,6 +158,8 @@ class CrossAttnWrapper(nn.Module):
         already freezes artist outputs, so EMA is skipped in both cases.
         """
         if self._st.get("artist_static_capture", False):
+            return artist_total
+        if not _in_stabilizer_window(self._st):
             return artist_total
         ema_alpha = float(self._st.get("artist_ema_alpha", 0.0))
         ema_compatible = fusion_mode in (FUSION_INTERPOLATE, FUSION_BASE_PRESERVE)
@@ -192,6 +204,10 @@ class CrossAttnWrapper(nn.Module):
         st = self._st
         low_vram = bool(st.get("low_vram_cache", False))
         if not st.get("artist_static_capture", False):
+            return self._collect_artist_outputs(
+                x, context, rope_emb, t_opts, individuals, fusion_mode
+            )
+        if not _in_stabilizer_window(st):
             return self._collect_artist_outputs(
                 x, context, rope_emb, t_opts, individuals, fusion_mode
             )
@@ -745,6 +761,8 @@ class CrossAttnWrapper(nn.Module):
         if not st.get("artist_anchor_q", False):
             return x
         if st.get("_anchor_failed", False):
+            return x
+        if not _in_stabilizer_window(st):
             return x
 
         threshold = int(st.get("anchor_deep_layer_threshold", ANCHOR_LAYER_THRESHOLD_DISABLED))

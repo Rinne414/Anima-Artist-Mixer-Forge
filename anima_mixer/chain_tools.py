@@ -229,7 +229,7 @@ def build_artist_chain_from_rows(layout, rows, num_blocks=28, extra_warnings=Non
         "",
         "next steps:",
         "  - connect artist_chain to AnimaArtistPack.artist_chain",
-        "  - connect AnimaArtistPack.artist_pack to AnimaArtistCrossAttn.artist_pack",
+        "  - connect AnimaArtistPack.artist_pack to AnimaArtistPresetApply.artist_pack",
         "  - use AnimaArtistPreset first; switch to compatibility_safe if other attention patch nodes are present",
     ])
     return chain, "\n".join(lines)

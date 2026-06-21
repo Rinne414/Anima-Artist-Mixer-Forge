@@ -1,0 +1,1087 @@
+{
+  "id": "0a1d14fb-5e7d-4982-b58d-3e2ebbbed0f0",
+  "revision": 0,
+  "last_node_id": 121,
+  "last_link_id": 285,
+  "nodes": [
+    {
+      "id": 91,
+      "type": "Note",
+      "pos": [
+        2105.24294061449,
+        -178.29802426624298
+      ],
+      "size": [
+        316.90645997475303,
+        206.57963826479528
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "Skirt, detached sleeves, tie.\n\nFull body Image of kirigaya suguha. Wearing a blue and white frilly idol dress. White thighhigs. Face, hair, breasts. Panty peek. Hair ornament."
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 90,
+      "type": "Note",
+      "pos": [
+        1660.1846069027567,
+        -394.1015742262541
+      ],
+      "size": [
+        319.0860486510476,
+        309.90644061759804
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "@yuchi \\(salmon-1000\\),\n@momisan,\n@toosaka asagi,\n@derauea,\n@tsukishiro saika,\n@tonee,\n@umanosuke,\n@hanzou,\n@swordsouls,\n@kuroi mimei,\n@raisuta,\n@yorousa \\(yoroiusagi\\),\n@yamazaki jun,\n@yumi xsh,\n@erakin,\n@niko \\(tama\\),\n@himemura saki \n\n\n@yuchi \\(salmon-1000\\),\n@tonee,\n@umanosuke,\n@kuroi mimei,\n@yorousa \\(yoroiusagi\\),\n@yumi xsh,\n@erakin,\n@niko \\(tama\\),\n@himemura saki,\n\n(@yuchi \\(salmon-1000\\):1.5),\n@tonee,\n@umanosuke,\n@kuroi mimei,\n@yorousa \\(yoroiusagi\\),\n\n::@blue-senpai::1.2\n::@momisan::1.2\n@hanzou\n::@raisuta::0.8\n@niko \\(tama\\)\n\n@himemura saki%0.0-0.4\n@yuchi \\(salmon-1000\\)%0.4-1.0\n@raisuta:0.5"
+      ],
+      "color": "#432",
+      "bgcolor": "#653"
+    },
+    {
+      "id": 87,
+      "type": "AnimaArtistCrossAttn",
+      "pos": [
+        1547.854481588843,
+        423.6504338495694
+      ],
+      "size": [
+        291.55234375,
+        214
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 212
+        },
+        {
+          "name": "artist_pack",
+          "type": "ANIMA_PACK",
+          "link": 208
+        },
+        {
+          "name": "advanced_options",
+          "shape": 7,
+          "type": "ANIMA_OPTS",
+          "link": 231
+        },
+        {
+          "name": "preset",
+          "shape": 7,
+          "type": "ANIMA_PRESET",
+          "link": 230
+        }
+      ],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "links": [
+            266
+          ]
+        },
+        {
+          "name": "base_prompt",
+          "type": "CONDITIONING",
+          "links": [
+            268
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AnimaArtistCrossAttn",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "output_avg",
+        "interpolate",
+        1,
+        true,
+        false
+      ]
+    },
+    {
+      "id": 19,
+      "type": "EmptyLatentImage",
+      "pos": [
+        1773.7859482602696,
+        714.1272138745925
+      ],
+      "size": [
+        270,
+        106
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            40
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "EmptyLatentImage",
+        "cnr_id": "comfy-core",
+        "ver": "0.3.40",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        1024,
+        1024,
+        1
+      ]
+    },
+    {
+      "id": 1,
+      "type": "VAELoader",
+      "pos": [
+        705.7242008533345,
+        1017.5500268340951
+      ],
+      "size": [
+        270,
+        58
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            5,
+            284
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAELoader",
+        "cnr_id": "comfy-core",
+        "ver": "0.21.1",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "qwen_image_vae.safetensors"
+      ]
+    },
+    {
+      "id": 117,
+      "type": "CLIPTextEncode",
+      "pos": [
+        1105.0906821750818,
+        868.0311786969204
+      ],
+      "size": [
+        402.75460950201375,
+        140.89907424699106
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 275
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            276,
+            277
+          ]
+        }
+      ],
+      "title": "CLIP Text Encode (Negative Prompt)",
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        },
+        "cnr_id": "comfy-core",
+        "ver": "0.3.65"
+      },
+      "widgets_values": [
+        "deviantart, score_1, score_2, score_3, low resolution, worst quality, low quality, lowres, bad anatomy, bad hand, extra toes,  jpeg, bad composition, chromatic aberration, censorship"
+      ]
+    },
+    {
+      "id": 119,
+      "type": "EmptyLatentImage",
+      "pos": [
+        1691.6296445801254,
+        1289.1463495218925
+      ],
+      "size": [
+        270,
+        106
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            281
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "EmptyLatentImage",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        },
+        "cnr_id": "comfy-core",
+        "ver": "0.3.40"
+      },
+      "widgets_values": [
+        1024,
+        1024,
+        1
+      ]
+    },
+    {
+      "id": 120,
+      "type": "VAEDecode",
+      "pos": [
+        2612.0938594273416,
+        1277.6096345795656
+      ],
+      "size": [
+        210.37067246591369,
+        48.22396692539701
+      ],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 283
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 284
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "slot_index": 0,
+          "links": [
+            285
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAEDecode",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        },
+        "cnr_id": "comfy-core",
+        "ver": "0.3.40"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 8,
+      "type": "UNETLoader",
+      "pos": [
+        147.27845655495562,
+        574.7521033982213
+      ],
+      "size": [
+        307.5999755859375,
+        82
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            212,
+            270
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "UNETLoader",
+        "cnr_id": "comfy-core",
+        "ver": "0.11.0",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "anima-base-v1.0.safetensors",
+        "default"
+      ]
+    },
+    {
+      "id": 4,
+      "type": "CLIPLoader",
+      "pos": [
+        175.6182300800839,
+        788.2013993646735
+      ],
+      "size": [
+        270,
+        106
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            213,
+            275,
+            279
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPLoader",
+        "cnr_id": "comfy-core",
+        "ver": "0.11.0",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "qwen_3_06b_base.safetensors",
+        "stable_diffusion",
+        "default"
+      ]
+    },
+    {
+      "id": 7,
+      "type": "VAEDecode",
+      "pos": [
+        2577.006140835543,
+        701.8348902839024
+      ],
+      "size": [
+        210.37067246591369,
+        48.22396692539701
+      ],
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 39
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 5
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "slot_index": 0,
+          "links": [
+            220
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAEDecode",
+        "cnr_id": "comfy-core",
+        "ver": "0.3.40",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 18,
+      "type": "KSampler",
+      "pos": [
+        2245.5957459287283,
+        547.0904967801093
+      ],
+      "size": [
+        286.3216050917681,
+        474
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 266
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 268
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 276
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 40
+        },
+        {
+          "name": "seed",
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": 229
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "slot_index": 0,
+          "links": [
+            39
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "KSampler",
+        "cnr_id": "comfy-core",
+        "ver": "0.3.40",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        34201659202706,
+        "randomize",
+        32,
+        5,
+        "er_sde",
+        "beta",
+        1
+      ]
+    },
+    {
+      "id": 103,
+      "type": "AnimaArtistPreset",
+      "pos": [
+        1251.8538255855065,
+        80.50271416063136
+      ],
+      "size": [
+        306.2974609375,
+        194
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "preset",
+          "type": "ANIMA_PRESET",
+          "links": [
+            230
+          ]
+        },
+        {
+          "name": "advanced_options",
+          "type": "ANIMA_OPTS",
+          "links": [
+            231
+          ]
+        },
+        {
+          "name": "summary",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AnimaArtistPreset",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.8"
+        }
+      },
+      "widgets_values": [
+        "balanced",
+        1,
+        true,
+        "all_layers",
+        ""
+      ]
+    },
+    {
+      "id": 118,
+      "type": "CLIPTextEncode",
+      "pos": [
+        1105.5926498850683,
+        1139.6246952433416
+      ],
+      "size": [
+        472.8269432078208,
+        291.5022989281284
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 279
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            278
+          ]
+        }
+      ],
+      "title": "CLIP Text Encode (Positive Prompt)",
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        },
+        "cnr_id": "comfy-core",
+        "ver": "0.3.65"
+      },
+      "widgets_values": [
+        "@yuchi \\(salmon-1000\\)\n\nrecent,\n\nAnd image of asuna yuuki and kirigaya suguha, together singing and dancing on stage as idols, dynamic pose.\n\nAsuna is wearing a red and white frilly idol dress. Long hair. White thighhigs. Panty peek. Hair ornament. Holding microphone.\n\nSuguha is wearing a blue and white frilly idol dress. Short hair. White thighhigs. Face, hair, breasts. Panty peek. Hair ornament. Holding microphone.\n\nRed and blue sparkling in the background."
+      ]
+    },
+    {
+      "id": 94,
+      "type": "Seed (rgthree)",
+      "pos": [
+        1695.3248677792121,
+        937.9861810824007
+      ],
+      "size": [
+        315,
+        130
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "dir": 4,
+          "name": "SEED",
+          "shape": 3,
+          "type": "INT",
+          "links": [
+            229,
+            282
+          ]
+        }
+      ],
+      "properties": {
+        "randomMax": 1125899906842624,
+        "randomMin": 0,
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.8"
+        }
+      },
+      "widgets_values": [
+        1098716302142360,
+        "",
+        "",
+        "okay"
+      ]
+    },
+    {
+      "id": 115,
+      "type": "KSampler",
+      "pos": [
+        2251.333921732824,
+        1181.9394832773387
+      ],
+      "size": [
+        286.3216050917681,
+        474
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 270
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 278
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 277
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 281
+        },
+        {
+          "name": "seed",
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": 282
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "slot_index": 0,
+          "links": [
+            283
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "KSampler",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        },
+        "cnr_id": "comfy-core",
+        "ver": "0.3.40"
+      },
+      "widgets_values": [
+        119946411973544,
+        "randomize",
+        32,
+        5,
+        "er_sde",
+        "beta",
+        1
+      ]
+    },
+    {
+      "id": 78,
+      "type": "AnimaArtistPack",
+      "pos": [
+        757.7362903110796,
+        267.29027663285945
+      ],
+      "size": [
+        435.1659976719732,
+        500.21335464394906
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 213
+        }
+      ],
+      "outputs": [
+        {
+          "name": "artist_pack",
+          "type": "ANIMA_PACK",
+          "links": [
+            208
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AnimaArtistPack",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "@yuchi \\(salmon-1000\\)",
+        "recent,\n\nAnd image of asuna yuuki and kirigaya suguha, together singing and dancing on stage as idols, dynamic pose.\n\nAsuna is wearing a red and white frilly idol dress. Long hair. White thighhigs. Panty peek. Hair ornament. Holding microphone.\n\nSuguha is wearing a blue and white frilly idol dress. Short hair. White thighhigs. Face, hair, breasts. Panty peek. Hair ornament. Holding microphone.\n\nRed and blue sparkling in the background."
+      ]
+    },
+    {
+      "id": 46,
+      "type": "SaveImage",
+      "pos": [
+        2924.246738093335,
+        598.0764309045526
+      ],
+      "size": [
+        628.3398654819198,
+        474.99263644890596
+      ],
+      "flags": {},
+      "order": 18,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 220
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "SaveImage",
+        "cnr_id": "comfy-core",
+        "ver": "0.20.1",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "version": "7.8",
+          "input_ue_unconnectable": {}
+        }
+      },
+      "widgets_values": [
+        "ComfyUI"
+      ]
+    },
+    {
+      "id": 121,
+      "type": "SaveImage",
+      "pos": [
+        2919.9004229330526,
+        1138.0192366567417
+      ],
+      "size": [
+        638.7769832292151,
+        581.6907345485513
+      ],
+      "flags": {},
+      "order": 17,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 285
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "SaveImage",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.8"
+        }
+      },
+      "widgets_values": [
+        "ComfyUI"
+      ]
+    }
+  ],
+  "links": [
+    [
+      5,
+      1,
+      0,
+      7,
+      1,
+      "VAE"
+    ],
+    [
+      39,
+      18,
+      0,
+      7,
+      0,
+      "LATENT"
+    ],
+    [
+      40,
+      19,
+      0,
+      18,
+      3,
+      "LATENT"
+    ],
+    [
+      208,
+      78,
+      0,
+      87,
+      1,
+      "ANIMA_PACK"
+    ],
+    [
+      212,
+      8,
+      0,
+      87,
+      0,
+      "MODEL"
+    ],
+    [
+      213,
+      4,
+      0,
+      78,
+      0,
+      "CLIP"
+    ],
+    [
+      220,
+      7,
+      0,
+      46,
+      0,
+      "IMAGE"
+    ],
+    [
+      229,
+      94,
+      0,
+      18,
+      4,
+      "INT"
+    ],
+    [
+      230,
+      103,
+      0,
+      87,
+      3,
+      "ANIMA_PRESET"
+    ],
+    [
+      231,
+      103,
+      1,
+      87,
+      2,
+      "ANIMA_OPTS"
+    ],
+    [
+      266,
+      87,
+      0,
+      18,
+      0,
+      "MODEL"
+    ],
+    [
+      268,
+      87,
+      1,
+      18,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      270,
+      8,
+      0,
+      115,
+      0,
+      "MODEL"
+    ],
+    [
+      275,
+      4,
+      0,
+      117,
+      0,
+      "CLIP"
+    ],
+    [
+      276,
+      117,
+      0,
+      18,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      277,
+      117,
+      0,
+      115,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      278,
+      118,
+      0,
+      115,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      279,
+      4,
+      0,
+      118,
+      0,
+      "CLIP"
+    ],
+    [
+      281,
+      119,
+      0,
+      115,
+      3,
+      "LATENT"
+    ],
+    [
+      282,
+      94,
+      0,
+      115,
+      4,
+      "INT"
+    ],
+    [
+      283,
+      115,
+      0,
+      120,
+      0,
+      "LATENT"
+    ],
+    [
+      284,
+      1,
+      0,
+      120,
+      1,
+      "VAE"
+    ],
+    [
+      285,
+      120,
+      0,
+      121,
+      0,
+      "IMAGE"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.7183732722781312,
+      "offset": [
+        -105.28785787114191,
+        -54.17845376508216
+      ]
+    },
+    "qgn_navigation_groups": [],
+    "qgn_locked": false,
+    "frontendVersion": "1.45.15",
+    "ue_links": [],
+    "links_added_by_ue": []
+  },
+  "version": 0.4
+}

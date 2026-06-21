@@ -218,6 +218,20 @@ class ForwardPatchSafetyTest(unittest.TestCase):
         self.assertEqual(set(dm.state_dict()), original_keys)
         self.assertNotIn("blocks.0.cross_attn.original.proj.weight", dm.state_dict())
 
+    def test_comfy_restore_keeps_attention_module_without_original_attr(self):
+        dm = _TinyDiffusion()
+        attn = dm.blocks[0].cross_attn
+        original_forward = attn.forward
+
+        wrapper = CrossAttnWrapper(original_forward, {"enabled": False}, 0)
+        patch = patching.make_cross_attn_forward_patch(wrapper)
+        attn.forward = patch
+        attn.forward = patch.original_forward
+
+        self.assertIs(dm.blocks[0].cross_attn, attn)
+        self.assertFalse(hasattr(dm.blocks[0].cross_attn, "original"))
+        self.assertIs(patching.unwrap_cross_attn_forward(attn), original_forward)
+
 
 class WrapperHelpersTest(unittest.TestCase):
     def _wrapper(self, state=None):
@@ -338,6 +352,21 @@ class WrapperHelpersTest(unittest.TestCase):
         items = [torch.zeros(1)] * 5
         chunks = w._artist_chunks(items)
         self.assertEqual([len(c) for c in chunks], [5])
+
+    def test_ema_window_expires_to_current_artist_total(self):
+        w = self._wrapper({
+            "artist_ema_alpha": 0.5,
+            "artist_static_capture": False,
+            "current_sigma": 10.0,
+            "stabilizer_min_sigma": 5.0,
+        })
+
+        first = w._apply_ema(torch.full((1, 1, 1), 10.0), "interpolate")
+        w._st["current_sigma"] = 4.0
+        second = w._apply_ema(torch.full((1, 1, 1), 20.0), "interpolate")
+
+        self.assertTrue(torch.equal(first, torch.full((1, 1, 1), 10.0)))
+        self.assertTrue(torch.equal(second, torch.full((1, 1, 1), 20.0)))
 
     def test_apply_fusion_interpolate_respects_mask(self):
         w = self._wrapper()
@@ -629,6 +658,40 @@ class MatchBaseNormTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(first, torch.full((1, 1, 2), 10.0)))
         self.assertTrue(torch.allclose(second, torch.full((1, 1, 2), 10.0)))
+
+    def test_static_capture_window_expires_to_dynamic_outputs(self):
+        class BaseMovesArtistFrozenAttn(torch.nn.Module):
+            def forward(self, x, context=None, rope_emb=None, transformer_options=None):
+                if context.mean().item() < 5.0:
+                    return x + 1.0
+                return x + 10.0
+
+        state = {
+            "normalize_weights": True,
+            "apply_to_uncond": False,
+            "match_base_norm": False,
+            "artist_static_capture": True,
+            "static_capture_k": 1,
+            "static_capture_mode": "output",
+            "current_sigma": 10.0,
+            "stabilizer_min_sigma": 5.0,
+        }
+        w = CrossAttnWrapper(BaseMovesArtistFrozenAttn(), state, 0)
+        base_ctx = torch.zeros(1, 1, 2)
+        artist_ctx = torch.full((1, 1, 2), 10.0)
+
+        first = w._fwd_output_avg(
+            torch.zeros(1, 1, 2), base_ctx, None, {},
+            [artist_ctx], [1.0], [1.0], [True], "interpolate", 1.0,
+        )
+        state["current_sigma"] = 4.0
+        second = w._fwd_output_avg(
+            torch.full((1, 1, 2), 100.0), base_ctx, None, {},
+            [artist_ctx], [1.0], [1.0], [True], "interpolate", 1.0,
+        )
+
+        self.assertTrue(torch.allclose(first, torch.full((1, 1, 2), 10.0)))
+        self.assertTrue(torch.allclose(second, torch.full((1, 1, 2), 110.0)))
 
     def test_static_capture_delta_mode_preserves_current_base_motion(self):
         class BaseMovesArtistFrozenAttn(torch.nn.Module):
@@ -1007,6 +1070,40 @@ class AnchorFingerprintTest(unittest.TestCase):
 
         self.assertEqual(out, "done")
         self.assertEqual(len(calls), 1)
+
+    def test_anchor_prerun_skips_after_stabilizer_window(self):
+        class FakeDM:
+            pass
+
+        state = {
+            "dm_ref": FakeDM(),
+            "artist_anchor_q": True,
+            "anchor_refresh_each_step": True,
+            "anchor_seeds_count": 1,
+            "low_vram_cache": False,
+            "_anchor_failed": False,
+            "_anchor_cache": {},
+            "_anchor_last_sigma": 6.0,
+            "stabilizer_min_sigma": 5.0,
+        }
+        calls = []
+
+        def fake_apply_model(x, timestep, **kwargs):
+            calls.append((x, timestep, kwargs))
+            return x
+
+        def prev_wrapper(apply_model, options):
+            return "done"
+
+        wrapped = make_sigma_capture(state, prev_wrapper)
+        out = wrapped(fake_apply_model, {
+            "input": torch.zeros(1, 2, 3),
+            "timestep": torch.tensor([4.0]),
+            "c": {"c_crossattn": torch.ones(1, 4, 3)},
+        })
+
+        self.assertEqual(out, "done")
+        self.assertEqual(calls, [])
 
     def test_anchor_cache_hit_skips_rerun_when_refresh_disabled(self):
         class FakeDM:

@@ -1,0 +1,157 @@
+{
+  "source": "local ComfyUI captured evidence for GitHub PR #4 reviewer questions",
+  "captured_at_local": "2026-06-20",
+  "fresh_multi_artist_note": "A fresh 1/2/4 artist matrix was run on 2026-06-21. The 1024px same-model and yuchi regression comparisons are captured local runs from 2026-06-20.",
+  "reported_comment_url": "https://github.com/An1X3R/Anima-Artist-Mixer/pull/4#issuecomment-4751557113",
+  "environment": {
+    "server": "http://127.0.0.1:8190",
+    "comfyui_reported_by_reviewer": "0.25.1",
+    "reviewer_python": "3.12.11",
+    "local_unet": "Anima\\anime\\anima_baseV10.safetensors",
+    "local_clip": "qwen_3_06b_base.safetensors",
+    "local_vae": "qwen_image_vae.safetensors"
+  },
+  "multi_sampler_same_model": {
+    "test": "current PR Preset balanced two-KSampler same-model smoke, 1024x1024, 32 steps",
+    "status": "success",
+    "settings": {
+      "width": 1024,
+      "height": 1024,
+      "steps": 32,
+      "cfg": 5.0,
+      "sampler": "er_sde",
+      "scheduler": "beta",
+      "seed": 1098716302142360,
+      "preset": "balanced",
+      "layer_mode": "all_layers",
+      "combine_mode": "output_avg",
+      "fusion_mode": "interpolate",
+      "strength": 1.0
+    },
+    "comparisons": {
+      "preset_mixer_vs_current_no_preset_mixer": {
+        "mae_0_255": 0.0,
+        "mae_0_1": 0.0,
+        "rms_0_255": 0.0,
+        "max_delta": 0
+      },
+      "preset_prompt_vs_existing_prompt": {
+        "mae_0_255": 0.0,
+        "mae_0_1": 0.0,
+        "rms_0_255": 0.0,
+        "max_delta": 0
+      }
+    },
+    "image_outputs": {
+      "preset_mixer": "I:\\ComfyUI-aki-v1.6\\ComfyUI\\output\\pr4_current_preset_two_sampler_1024_32_mixer_00001_.png",
+      "prompt_no_mixer": "I:\\ComfyUI-aki-v1.6\\ComfyUI\\output\\pr4_current_preset_two_sampler_1024_32_prompt_00001_.png",
+      "contact_sheet": "pr_evidence\\compare-1024-32-preset-two-sampler-yuchi.png"
+    }
+  },
+  "single_yuchi_current_vs_original": {
+    "settings": {
+      "width": 1024,
+      "height": 1024,
+      "steps": 32,
+      "cfg": 5.0,
+      "sampler": "er_sde",
+      "scheduler": "beta",
+      "seed": 1098716302142360,
+      "artist": "@yuchi \\(salmon-1000\\)",
+      "no_preset": true
+    },
+    "timings_seconds": {
+      "direct_prompt": 37.79148290000012,
+      "current_mixer": 41.78835230000186,
+      "original_mixer": 43.151790599997184
+    },
+    "comparisons_vs_direct_prompt": {
+      "original_descriptor_distance": 0.17101046239087714,
+      "current_descriptor_distance": 0.17101046239087714,
+      "original_mae_0_1": 0.20868124494365617,
+      "current_mae_0_1": 0.20868124494365617
+    },
+    "interpretation": "The current PR and original mixer behavior match for the reported yuchi tag under no-preset settings; the direct prompt differs because direct LLM prompt conditioning and cross-attention output mixing are different mechanisms."
+  },
+  "fresh_multi_artist_matrix": {
+    "captured_at_local": "20260621_154650",
+    "settings": {
+      "width": 512,
+      "height": 512,
+      "steps": 8,
+      "cfg": 5.0,
+      "sampler": "er_sde",
+      "scheduler": "beta",
+      "seed": 42424242,
+      "base_prompt": "1girl, solo, upper body portrait, face visible, white blouse, navy jacket, looking at viewer, simple background, clean linework, detailed eyes"
+    },
+    "cases": {
+      "single_yuchi": {
+        "artists": "@yuchi \\(salmon-1000\\)",
+        "prompt_seconds": 3.0645144999998593,
+        "balanced_seconds": 3.0143692999999985,
+        "drift_auto_seconds": 4.021750599999905,
+        "balanced_vs_prompt_descriptor_distance": 0.09158119896663977,
+        "drift_auto_vs_prompt_descriptor_distance": 0.4186236978171867
+      },
+      "double_yuchi_uof": {
+        "artists": "@yuchi \\(salmon-1000\\), @uof",
+        "prompt_seconds": 3.397884900000463,
+        "balanced_seconds": 4.060982800000602,
+        "drift_auto_seconds": 4.0552357999995365,
+        "balanced_vs_prompt_descriptor_distance": 0.5003334351683532,
+        "drift_auto_vs_prompt_descriptor_distance": 0.6454461030246943
+      },
+      "multi_yuchi_uof_kieed_ciloranko": {
+        "artists": "@yuchi \\(salmon-1000\\), @uof, @kieed, @ciloranko",
+        "prompt_seconds": 3.1647345000001224,
+        "balanced_seconds": 5.034831699999813,
+        "drift_auto_seconds": 4.022237500000301,
+        "balanced_vs_prompt_descriptor_distance": 0.6155923853684913,
+        "drift_auto_vs_prompt_descriptor_distance": 0.6685380878951984
+      }
+    },
+    "timing_note": "Single run timings include queue, model/cache state, and decode overhead; use them as cost visibility, not proof of speedup.",
+    "contact_sheet": "pr_evidence\\fresh-multi-artist-matrix.png",
+    "metrics": "pr_evidence\\fresh-multi-artist-matrix.metrics.json"
+  },
+  "broader_original_current_compare": {
+    "settings": {
+      "width": 1024,
+      "height": 1024,
+      "steps": 16,
+      "cfg": 5.0,
+      "sampler": "er_sde",
+      "scheduler": "beta",
+      "seed": 1098716302142360
+    },
+    "avg_seconds": 24.17240525555563,
+    "cases": {
+      "workflow_single_yuchi": {
+        "original_seconds": 24.374515500000598,
+        "current_seconds": 20.81133189999946,
+        "original_vs_prompt_descriptor_distance": 0.1857948902695608,
+        "current_vs_prompt_descriptor_distance": 0.1857948902695608
+      },
+      "workflow_double_yuchi_momisan": {
+        "original_seconds": 23.32994410000083,
+        "current_seconds": 23.08075579999968,
+        "original_vs_prompt_descriptor_distance": 0.3448418185333659,
+        "current_vs_prompt_descriptor_distance": 0.3448418185333659
+      },
+      "workflow_multi_yuchi_momisan_tonee_umanosuke": {
+        "original_seconds": 30.66959880000013,
+        "current_seconds": 29.91561709999951,
+        "original_vs_prompt_descriptor_distance": 0.1435433615054384,
+        "current_vs_prompt_descriptor_distance": 0.1435433615054384
+      }
+    }
+  },
+  "code_safety_regressions": [
+    "tests/test_tensor_math.py::ForwardPatchSafetyTest::test_forward_patch_keeps_state_dict_paths_stable",
+    "tests/test_tensor_math.py::ForwardPatchSafetyTest::test_full_module_wrapper_would_register_original_submodule",
+    "tests/test_tensor_math.py::ForwardPatchSafetyTest::test_forward_patch_can_be_unwrapped_to_original_forward",
+    "tests/test_tensor_math.py::ForwardPatchSafetyTest::test_repatching_forward_unwraps_without_state_dict_pollution",
+    "tests/test_tensor_math.py::ForwardPatchSafetyTest::test_comfy_restore_keeps_attention_module_without_original_attr"
+  ]
+}

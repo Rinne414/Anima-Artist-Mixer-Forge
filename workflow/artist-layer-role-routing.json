@@ -1,0 +1,633 @@
+{
+  "id": "anima-artist-layer-role-routing",
+  "revision": 0,
+  "last_node_id": 13,
+  "last_link_id": 12,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "UNETLoader",
+      "pos": [
+        80,
+        240
+      ],
+      "size": [
+        310,
+        82
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            1
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "Node name for S&R": "UNETLoader"
+      },
+      "widgets_values": [
+        "anima-base-v1.0.safetensors",
+        "default"
+      ],
+      "title": "Anima UNet"
+    },
+    {
+      "id": 2,
+      "type": "CLIPLoader",
+      "pos": [
+        80,
+        380
+      ],
+      "size": [
+        310,
+        106
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            2,
+            3
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "Node name for S&R": "CLIPLoader"
+      },
+      "widgets_values": [
+        "qwen_3_06b_base.safetensors",
+        "stable_diffusion",
+        "default"
+      ],
+      "title": "Anima CLIP"
+    },
+    {
+      "id": 3,
+      "type": "VAELoader",
+      "pos": [
+        80,
+        540
+      ],
+      "size": [
+        310,
+        58
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            11
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "Node name for S&R": "VAELoader"
+      },
+      "widgets_values": [
+        "qwen_image_vae.safetensors"
+      ],
+      "title": "Anima VAE"
+    },
+    {
+      "id": 4,
+      "type": "AnimaArtistPack",
+      "pos": [
+        500,
+        160
+      ],
+      "size": [
+        520,
+        420
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "artist_pack",
+          "type": "ANIMA_PACK",
+          "links": [
+            4
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "anima-artist-mixer",
+        "Node name for S&R": "AnimaArtistPack"
+      },
+      "widgets_values": [
+        "@raisuta@0%-33%\n@yuchi \\(salmon-1000\\)@0.33-0.67\n@blue-senpai@67%-100%",
+        "recent, full body image of kirigaya suguha on an idol stage, dynamic pose, singing and dancing, blue and white frilly idol dress, white thighhighs, detached sleeves, tie, hair ornament, bright stage lights, detailed background"
+      ],
+      "title": "Pack: background / character / clothing artists"
+    },
+    {
+      "id": 5,
+      "type": "AnimaArtistPreset",
+      "pos": [
+        500,
+        620
+      ],
+      "size": [
+        330,
+        214
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "preset",
+          "type": "ANIMA_PRESET",
+          "links": [
+            5
+          ]
+        },
+        {
+          "name": "advanced_options",
+          "type": "ANIMA_OPTS",
+          "links": null
+        },
+        {
+          "name": "summary",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "anima-artist-mixer",
+        "Node name for S&R": "AnimaArtistPreset"
+      },
+      "widgets_values": [
+        "balanced",
+        1,
+        true,
+        "all_layers",
+        ""
+      ],
+      "title": "Preset: all global layers"
+    },
+    {
+      "id": 6,
+      "type": "AnimaArtistPresetApply",
+      "pos": [
+        1100,
+        220
+      ],
+      "size": [
+        310,
+        214
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 1
+        },
+        {
+          "name": "artist_pack",
+          "type": "ANIMA_PACK",
+          "link": 4
+        },
+        {
+          "name": "preset",
+          "shape": 7,
+          "type": "ANIMA_PRESET",
+          "link": 5
+        },
+        {
+          "name": "advanced_options",
+          "shape": 7,
+          "type": "ANIMA_OPTS",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "links": [
+            6
+          ]
+        },
+        {
+          "name": "base_prompt",
+          "type": "CONDITIONING",
+          "links": [
+            7
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "anima-artist-mixer",
+        "Node name for S&R": "AnimaArtistPresetApply"
+      },
+      "widgets_values": [
+        true,
+        false
+      ],
+      "title": "Apply preset: per-artist layer windows"
+    },
+    {
+      "id": 7,
+      "type": "CLIPTextEncode",
+      "pos": [
+        500,
+        900
+      ],
+      "size": [
+        520,
+        140
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 3
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            8
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "Node name for S&R": "CLIPTextEncode"
+      },
+      "widgets_values": [
+        "bad hands, extra fingers, lowres, worst quality, low quality, jpeg artifacts, blurry"
+      ],
+      "title": "Negative prompt"
+    },
+    {
+      "id": 8,
+      "type": "EmptyLatentImage",
+      "pos": [
+        1100,
+        520
+      ],
+      "size": [
+        310,
+        106
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            9
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "Node name for S&R": "EmptyLatentImage"
+      },
+      "widgets_values": [
+        1024,
+        1024,
+        1
+      ]
+    },
+    {
+      "id": 9,
+      "type": "KSampler",
+      "pos": [
+        1500,
+        220
+      ],
+      "size": [
+        310,
+        474
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 6
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 7
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 8
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 9
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            10
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "Node name for S&R": "KSampler"
+      },
+      "widgets_values": [
+        1078925437746991,
+        "fixed",
+        28,
+        5,
+        "dpmpp_2m_sde_gpu",
+        "beta",
+        1
+      ]
+    },
+    {
+      "id": 10,
+      "type": "VAEDecode",
+      "pos": [
+        1900,
+        260
+      ],
+      "size": [
+        260,
+        58
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 10
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 9
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            12
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "Node name for S&R": "VAEDecode"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 11,
+      "type": "SaveImage",
+      "pos": [
+        2240,
+        220
+      ],
+      "size": [
+        360,
+        300
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 12
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "Node name for S&R": "SaveImage"
+      },
+      "widgets_values": [
+        "AnimaLayerRoleRouting"
+      ]
+    },
+    {
+      "id": 12,
+      "type": "AnimaArtistChainPreview",
+      "pos": [
+        1100,
+        720
+      ],
+      "size": [
+        520,
+        260
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "cleaned_chain",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "report",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "anima-artist-mixer",
+        "Node name for S&R": "AnimaArtistChainPreview"
+      },
+      "widgets_values": [
+        "@raisuta@0%-33%\n@yuchi \\(salmon-1000\\)@0.33-0.67\n@blue-senpai@67%-100%",
+        28
+      ],
+      "title": "Preview: L0-L8 / L9-L18 / L19-L27"
+    },
+    {
+      "id": 13,
+      "type": "Note",
+      "pos": [
+        80,
+        40
+      ],
+      "size": [
+        660,
+        120
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [
+        "Per-artist layer-role routing example:\n@raisuta@0%-33% controls early/background/composition blocks.\n@yuchi \\(salmon-1000\\)@0.33-0.67 controls middle character/body blocks.\n@blue-senpai@67%-100% controls late clothing/detail blocks."
+      ]
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      6,
+      0,
+      "MODEL"
+    ],
+    [
+      2,
+      2,
+      0,
+      4,
+      0,
+      "CLIP"
+    ],
+    [
+      3,
+      2,
+      0,
+      7,
+      0,
+      "CLIP"
+    ],
+    [
+      4,
+      4,
+      0,
+      6,
+      1,
+      "ANIMA_PACK"
+    ],
+    [
+      5,
+      5,
+      0,
+      6,
+      2,
+      "ANIMA_PRESET"
+    ],
+    [
+      6,
+      6,
+      0,
+      9,
+      0,
+      "MODEL"
+    ],
+    [
+      7,
+      6,
+      1,
+      9,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      8,
+      7,
+      0,
+      9,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      9,
+      8,
+      0,
+      9,
+      3,
+      "LATENT"
+    ],
+    [
+      10,
+      9,
+      0,
+      10,
+      0,
+      "LATENT"
+    ],
+    [
+      11,
+      3,
+      0,
+      10,
+      1,
+      "VAE"
+    ],
+    [
+      12,
+      10,
+      0,
+      11,
+      0,
+      "IMAGE"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.8,
+      "offset": [
+        0,
+        0
+      ]
+    }
+  },
+  "version": 0.4
+}

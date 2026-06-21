@@ -1,6 +1,0 @@
-comfy_original:
-  base_path: I:/ComfyUI-aki-v1.6/ComfyUI
-  diffusion_models: models/diffusion_models
-  text_encoders: models/text_encoders
-  clip: models/text_encoders
-  vae: models/vae

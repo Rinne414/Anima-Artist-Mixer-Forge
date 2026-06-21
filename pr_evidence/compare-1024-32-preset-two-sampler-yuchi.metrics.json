@@ -1,5 +1,7 @@
 {
   "test": "current PR Preset balanced two-KSampler same-model smoke, 1024x1024, 32 steps",
+  "source": "local ComfyUI captured evidence for GitHub PR #4 reviewer questions",
+  "captured_at_local": "2026-06-20",
   "server": "http://127.0.0.1:8190",
   "prompt_id": "1dcffaf6-4e5b-41ce-920b-d23e41835b25",
   "status": "success",

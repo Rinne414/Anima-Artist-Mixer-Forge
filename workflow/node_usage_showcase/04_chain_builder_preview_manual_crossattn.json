@@ -1,0 +1,160 @@
+{
+  "1": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "Anima\\anime\\anima_baseV10.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "2": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_3_06b_base.safetensors",
+      "type": "stable_diffusion",
+      "device": "default"
+    }
+  },
+  "3": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    }
+  },
+  "4": {
+    "class_type": "AnimaArtistChainBuilder",
+    "inputs": {
+      "layout": "manual",
+      "artist_table": "",
+      "artist_1": "@uof",
+      "weight_1": 1.0,
+      "artist_2": "@kieed",
+      "weight_2": -0.35,
+      "artist_3": "@ciloranko",
+      "weight_3": 0.8,
+      "layer_route_1": "0-12",
+      "timing_route_1": "0.0-0.55~0.10",
+      "layer_route_2": "9-20",
+      "timing_route_2": "0.35-1.0~0.10",
+      "layer_route_3": "19-27",
+      "timing_route_3": "",
+      "num_blocks": 28
+    }
+  },
+  "5": {
+    "class_type": "AnimaArtistChainPreview",
+    "inputs": {
+      "artist_chain": ["4", 0],
+      "num_blocks": 28
+    }
+  },
+  "6": {
+    "class_type": "AnimaArtistPack",
+    "inputs": {
+      "clip": ["2", 0],
+      "artist_chain": ["5", 0],
+      "base_prompt": "recent, 1girl, solo, upper body portrait, white blouse, navy jacket, looking at viewer, simple background, clean linework, detailed eyes"
+    }
+  },
+  "7": {
+    "class_type": "AnimaArtistOptions",
+    "inputs": {
+      "start_block": 0,
+      "end_block": -1,
+      "start_percent": 0.0,
+      "end_percent": 1.0,
+      "normalize_weights": true,
+      "artist_ema_alpha": 0.25,
+      "lowrank_k": 2,
+      "artist_static_capture": false,
+      "static_capture_k": 6,
+      "static_capture_mode": "output",
+      "static_capture_blend_alpha": 0.25,
+      "artist_anchor_q": false,
+      "anchor_seeds_count": 1,
+      "anchor_user_blend": 0.0,
+      "anchor_deep_layer_threshold": -1,
+      "anchor_refresh_each_step": false,
+      "stabilizer_end_percent": 1.0,
+      "layer_filter": "",
+      "compatibility_mode": false,
+      "max_batch_artists": 0,
+      "low_vram_cache": false,
+      "match_base_norm": true,
+      "anchor_base_norm_ref": false,
+      "norm_lock_mode": "token",
+      "norm_lock_scope": "per_artist",
+      "contribution_balance": false,
+      "contribution_balance_alpha": 1.0,
+      "mixed_delta_cap": true,
+      "mixed_delta_cap_ratio": 0.85
+    }
+  },
+  "8": {
+    "class_type": "AnimaArtistCrossAttn",
+    "inputs": {
+      "model": ["1", 0],
+      "artist_pack": ["6", 0],
+      "combine_mode": "lowrank_avg",
+      "fusion_mode": "base_preserve",
+      "strength": 1.15,
+      "enabled": true,
+      "apply_to_uncond": false,
+      "advanced_options": ["7", 0]
+    }
+  },
+  "9": {
+    "class_type": "AnimaArtistInspector",
+    "inputs": {
+      "artist_pack": ["6", 0],
+      "combine_mode": "lowrank_avg",
+      "fusion_mode": "base_preserve",
+      "strength": 1.15,
+      "advanced_options": ["7", 0],
+      "model": ["1", 0]
+    }
+  },
+  "10": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "nsfw, nude, naked, bare chest, cleavage, nipples, cropped head, head out of frame, lowres, worst quality, bad anatomy",
+      "clip": ["2", 0]
+    }
+  },
+  "11": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": 512,
+      "height": 512,
+      "batch_size": 1
+    }
+  },
+  "12": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["8", 0],
+      "positive": ["8", 1],
+      "negative": ["10", 0],
+      "latent_image": ["11", 0],
+      "seed": 44004004,
+      "steps": 8,
+      "cfg": 5.0,
+      "sampler_name": "er_sde",
+      "scheduler": "beta",
+      "denoise": 1.0
+    }
+  },
+  "13": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["12", 0],
+      "vae": ["3", 0]
+    }
+  },
+  "14": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["13", 0],
+      "filename_prefix": "anima_node_usage_04_manual_crossattn"
+    }
+  }
+}

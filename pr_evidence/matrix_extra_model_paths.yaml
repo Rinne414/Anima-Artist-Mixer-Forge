@@ -1,0 +1,8 @@
+﻿comfy_aki_models:
+  base_path: I:\ComfyUI-aki-v1.6\ComfyUI
+  diffusion_models: models\diffusion_models
+  clip: models\clip
+  text_encoders: models\text_encoders
+  vae: models\vae
+  checkpoints: models\checkpoints
+  loras: models\loras

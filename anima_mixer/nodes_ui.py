@@ -63,8 +63,9 @@ class AnimaArtistChainBuilder:
             "multiline": False,
             "default": "",
             "tooltip": (
-                "Optional layer route, e.g. 0-8 or 0,2,4. Used in manual "
-                "layout; other layouts auto-fill empty routes."
+                "Optional layer route, e.g. 0-8, 0,2,4, 0%-33%, "
+                "or 0.33-0.67. Used in manual layout; other layouts "
+                "auto-fill empty routes."
             ),
         }
         timing_input = {
@@ -383,6 +384,16 @@ class AnimaArtistOptions:
                         "every step. Advanced A/B option."
                     ),
                 }),
+                "stabilizer_end_percent": ("FLOAT", {
+                    "default": 1.0, "min": 0.0, "max": 1.0, "step": 0.05,
+                    "tooltip": (
+                        "Sampling progress where cache-based stabilizers stop. "
+                        "Applies to EMA, static_capture, and anchor_q.\n"
+                        "1.0: stabilizers run for the whole sampling pass.\n"
+                        "0.4-0.6: useful when late-step samplers need dynamic "
+                        "step-to-step motion."
+                    ),
+                }),
             },
             "optional": {
                 "layer_filter": ("STRING", {
@@ -515,6 +526,7 @@ class AnimaArtistOptions:
               anchor_seeds_count=1, anchor_user_blend=0.0,
               anchor_deep_layer_threshold=ANCHOR_LAYER_THRESHOLD_DISABLED,
               anchor_refresh_each_step=False,
+              stabilizer_end_percent=1.0,
               layer_filter="", compatibility_mode=False,
               max_batch_artists=0, low_vram_cache=False, match_base_norm=False,
               anchor_base_norm_ref=False,
@@ -541,6 +553,7 @@ class AnimaArtistOptions:
             "anchor_user_blend": float(anchor_user_blend),
             "anchor_deep_layer_threshold": int(anchor_deep_layer_threshold),
             "anchor_refresh_each_step": bool(anchor_refresh_each_step),
+            "stabilizer_end_percent": float(stabilizer_end_percent),
             "layer_filter": str(layer_filter or ""),
             "compatibility_mode": bool(compatibility_mode),
             "max_batch_artists": int(max_batch_artists),
@@ -565,17 +578,18 @@ class AnimaArtistPreset:
                     "default": PRESET_BALANCED,
                     "tooltip": (
                         "Advanced one-knob working modes.\n"
+                        "prompt_passthrough: direct prompt/no mixer, preserves positive prompt weights\n"
                         "balanced: original-style output_avg + interpolate\n"
                         "strong_style: stronger style, strength extrapolated to 1.65\n"
-                        "stable_seed: static-capture no-norm, auto layers 9-20, content-safer seed stability\n"
+                        "stable_seed: delta-capped output_avg, auto layers 9-20, content-safer seed stability\n"
                         "drift_auto: runtime route from base_prompt and artist count; "
-                        "4+ portrait uses compatibility_safe_9_15, street uses compatibility_safe\n"
-                        "drift_soft: softer stable_seed for portrait / broad-subject prompts\n"
+                        "4+ broad prompts stay on drift_soft instead of compatibility concat\n"
+                        "drift_soft: softer EMA output_avg for portrait / broad-subject prompts\n"
                         "face_lock: base_preserve + token norm lock for close-up faces\n"
-                        "scene_lock: base_preserve static capture for wide / background-heavy scenes\n"
-                        "anchor_lock: legacy 4-anchor Q no-norm, strength 1.2, auto layers 9-25\n"
+                        "scene_lock: base_preserve + light EMA for wide / background-heavy scenes\n"
+                        "anchor_lock: single-anchor Q with user blend, strength 0.9, auto layers 9-15\n"
                         "fast_preview: concat path, speed first, good for hunting\n"
-                        "identity_guard: base_preserve + lowrank, protects identity/composition\n"
+                        "identity_guard: base_preserve + norm/delta guard, protects identity/composition\n"
                         "compatibility_safe: concat + concat_with_base, plays nice with "
                         "regional/Forge-style nodes"
                     ),
@@ -666,7 +680,8 @@ class AnimaArtistStarter:
                         "advanced / compatibility modes.\n"
                         "balanced: original-compatible default\n"
                         "strong_style: stronger artist style\n"
-                        "drift_auto: automatic low-drift route"
+                        "drift_auto: automatic low-drift route\n"
+                        "prompt_passthrough: direct prompt/no mixer"
                     ),
                 }),
                 "artist_table": ("STRING", {
@@ -690,8 +705,8 @@ class AnimaArtistStarter:
                 "intensity": ("FLOAT", {
                     "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05,
                     "tooltip": (
-                        "Recipe strength multiplier. compatibility_safe and "
-                        "fast_preview do not scale strength."
+                        "Recipe strength multiplier. compatibility_safe, "
+                        "fast_preview, and prompt_passthrough do not scale strength."
                     ),
                 }),
             },
@@ -751,9 +766,10 @@ class AnimaArtistStarter:
             "",
             "wire:",
             "  - artist_chain -> AnimaArtistPack.artist_chain",
-            "  - preset -> AnimaArtistCrossAttn.preset",
-            "  - advanced_options -> AnimaArtistCrossAttn.advanced_options only if you want the explicit option payload",
-            "  - AnimaArtistPack.artist_pack -> AnimaArtistCrossAttn.artist_pack",
+            "  - model -> AnimaArtistPresetApply.model",
+            "  - AnimaArtistPack.artist_pack -> AnimaArtistPresetApply.artist_pack",
+            "  - preset -> AnimaArtistPresetApply.preset",
+            "  - advanced_options -> AnimaArtistPresetApply.advanced_options only if you want the explicit option payload",
             "",
             "preset summary:",
             f"  combine_mode: {payload['combine_mode']}",
@@ -885,6 +901,7 @@ class AnimaArtistInspector:
             f"compatibility_mode: {format_bool(adv.get('compatibility_mode', False))}",
             f"sigma range percent: {float(adv.get('start_percent', 0.0)):.3f} - "
             f"{float(adv.get('end_percent', 1.0)):.3f}",
+            f"stabilizer_end_percent: {float(adv.get('stabilizer_end_percent', 1.0)):.2f}",
             f"EMA alpha: {float(adv.get('artist_ema_alpha', 0.0)):.2f}",
             f"lowrank_k: {int(adv.get('lowrank_k', 1))}",
             f"static_capture: {format_bool(adv.get('artist_static_capture', False))} "
@@ -1056,7 +1073,7 @@ class AnimaArtistRecipeLoad:
                     "tooltip": (
                         "Paste a recipe produced by AnimaArtistRecipeSave. The "
                         "preset output carries combine/fusion/strength/options; "
-                        "wire it to AnimaArtistCrossAttn.preset."
+                        "wire it to AnimaArtistPresetApply.preset."
                     ),
                 }),
             },
@@ -1097,7 +1114,8 @@ class AnimaArtistRecipeLoad:
             "",
             "wire:",
             "  - artist_chain -> AnimaArtistPack.artist_chain",
-            "  - preset -> AnimaArtistCrossAttn.preset",
+            "  - preset -> AnimaArtistPresetApply.preset",
+            "  - advanced_options -> AnimaArtistPresetApply.advanced_options",
         ])
         summary = "\n".join(lines)
         return {

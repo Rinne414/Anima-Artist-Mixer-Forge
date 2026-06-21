@@ -32,6 +32,7 @@ from .constants import (
 )
 from .options import build_preset_payload, merge_runtime_options
 from .parsing import (
+    build_passthrough_prompt,
     expand_prompt_weights,
     parse_artist_layer_routes,
     parse_artist_timing_routes,
@@ -102,7 +103,7 @@ class AnimaArtistPack:
                         "Default weight 1.0; range [-4.0, 4.0]. Negative weights\n"
                         "subtract that artist's style (style subtraction).\n"
                         "::weight stacks with parentheses: ::(wlop:1.1)::0.8\n"
-                        "Optional per-artist layer route: wlop@0-8, krenz@9-18\n"
+                        "Optional per-artist layer route: wlop@0-8, krenz@33%-67%\n"
                         "Optional per-artist timing: wlop@0-8%0.0-0.45\n"
                         "Optional timing fade: wlop%0.0-0.45~0.1 (smoothstep edges)\n"
                         "\n"
@@ -131,6 +132,7 @@ class AnimaArtistPack:
     CATEGORY = "Anima/CrossAttn"
 
     def pack(self, clip, artist_chain, base_prompt=""):
+        raw_artist_chain = str(artist_chain or "").strip()
         parts = split_artist_chain(artist_chain)
         parts, timing_routes = parse_artist_timing_routes(parts)
         parts, layer_routes = parse_artist_layer_routes(parts)
@@ -155,8 +157,10 @@ class AnimaArtistPack:
                 "layer_routes": [],
                 "timing_routes": [],
                 "has_explicit_weights": False,
+                "raw_artist_chain": raw_artist_chain,
                 "base_prompt": base,
                 "base_conditioning": base_conditioning,
+                "clip": clip,
             },)
 
         if len(names) > MAX_ARTISTS:
@@ -195,8 +199,10 @@ class AnimaArtistPack:
             "layer_routes": layer_routes,
             "timing_routes": timing_routes,
             "has_explicit_weights": has_explicit,
+            "raw_artist_chain": raw_artist_chain,
             "base_prompt": base,
             "base_conditioning": base_conditioning,
+            "clip": clip,
         },)
 
 
@@ -224,7 +230,8 @@ class AnimaArtistBasic:
                         "advanced modes.\n"
                         "balanced: original-compatible default\n"
                         "strong_style: stronger artist style\n"
-                        "drift_auto: automatic low-drift route"
+                        "drift_auto: automatic low-drift route\n"
+                        "prompt_passthrough: direct prompt/no mixer"
                     ),
                 }),
                 "intensity": ("FLOAT", {
@@ -353,6 +360,7 @@ def _build_runtime_state(enabled, fusion_mode, combine_mode, strength,
         "real_lens": None,
         "dm_ref": dm,
         "sigma_range": sigma_range,
+        "stabilizer_min_sigma": adv.get("stabilizer_min_sigma"),
         "current_sigma": None,
         "external_cross_attn_patches": external_patches,
         "_ema_cache": {},
@@ -415,7 +423,13 @@ class AnimaArtistCrossAttn:
             },
             "optional": {
                 "advanced_options": ("ANIMA_OPTS",),
-                "preset": ("ANIMA_PRESET",),
+                "preset": ("ANIMA_PRESET", {
+                    "tooltip": (
+                        "Compatibility input for older workflows. For preset "
+                        "workflows, prefer Anima Artist Apply Preset so the "
+                        "manual combine/fusion/strength widgets are not shown."
+                    ),
+                }),
             },
         }
 
@@ -455,6 +469,47 @@ class AnimaArtistCrossAttn:
             # Nothing to inject: hand back the unpatched model with zero overhead.
             return (model, base_cond_out)
 
+        labels = artist_pack.get("labels") or []
+        parsed_weights = artist_pack.get("weights")
+        if isinstance(parsed_weights, (list, tuple)) and len(parsed_weights) == len(labels):
+            user_weights = [float(w) for w in parsed_weights]
+        else:
+            user_weights = [1.0] * len(labels)
+
+        if adv.get("prompt_passthrough", False):
+            clip = artist_pack.get("clip")
+            if clip is None:
+                raise ValueError(
+                    "[AnimaCrossAttn] prompt_passthrough requires an artist_pack "
+                    "built by the current AnimaArtistPack node."
+                )
+            if any(str(route or "").strip() for route in artist_pack.get("layer_routes") or []):
+                raise ValueError(
+                    "[AnimaCrossAttn] prompt_passthrough does not support layer routes; "
+                    "use balanced or another mixer preset for @layer routing."
+                )
+            if any(str(route or "").strip() for route in artist_pack.get("timing_routes") or []):
+                raise ValueError(
+                    "[AnimaCrossAttn] prompt_passthrough does not support timing routes; "
+                    "use balanced or another mixer preset for %timing routing."
+                )
+            prompt_text = build_passthrough_prompt(
+                artist_pack.get("raw_artist_chain", ""),
+                labels,
+                user_weights,
+                artist_pack.get("has_explicit_weights", False),
+                base_prompt,
+            )
+            try:
+                tokens = clip.tokenize(prompt_text)
+                direct_conditioning = clip.encode_from_tokens_scheduled(tokens)
+            except Exception as e:
+                raise ValueError(
+                    "[AnimaCrossAttn] prompt_passthrough failed to encode direct "
+                    f"prompt (text={prompt_text!r}): {e}"
+                )
+            return (model, direct_conditioning)
+
         start_percent = float(adv.get("start_percent", 0.0))
         end_percent = float(adv.get("end_percent", 1.0))
         normalize_w = bool(adv.get("normalize_weights", True))
@@ -481,11 +536,15 @@ class AnimaArtistCrossAttn:
         adv["mixed_delta_cap_ratio"] = max(
             0.0, min(MIXED_DELTA_CAP_RATIO_MAX, mixed_delta_cap_ratio)
         )
+        stabilizer_end_percent = float(adv.get("stabilizer_end_percent", 1.0))
+        adv["stabilizer_end_percent"] = max(0.0, min(1.0, stabilizer_end_percent))
 
         use_sigma_range = (start_percent > 0.0) or (end_percent < 1.0)
+        use_stabilizer_window = adv["stabilizer_end_percent"] < 1.0
         need_sigma_capture = (
             use_sigma_range or (artist_ema_alpha > 0.0)
             or artist_static_capture or artist_anchor_q
+            or use_stabilizer_window
         )
 
         # Mutual-exclusion checks.
@@ -516,7 +575,6 @@ class AnimaArtistCrossAttn:
         if not adv.get("artist_anchor_q", False):
             adv["anchor_base_norm_ref"] = False
             adv["anchor_refresh_each_step"] = False
-        labels = artist_pack.get("labels") or []
         layer_route_texts = artist_pack.get("layer_routes") or []
         timing_route_texts = artist_pack.get("timing_routes") or []
 
@@ -534,11 +592,8 @@ class AnimaArtistCrossAttn:
             w_list.append(w)
 
         n = len(raws)
-        parsed_weights = artist_pack.get("weights")
         has_explicit_weights = bool(artist_pack.get("has_explicit_weights", False))
-        if isinstance(parsed_weights, (list, tuple)) and len(parsed_weights) == n:
-            user_weights = [float(w) for w in parsed_weights]
-        else:
+        if len(user_weights) != n:
             user_weights = [1.0] * n
             has_explicit_weights = False
 
@@ -646,6 +701,22 @@ class AnimaArtistCrossAttn:
                 )
                 sigma_range = None
 
+        adv["stabilizer_min_sigma"] = None
+        if use_stabilizer_window:
+            try:
+                ms = model.get_model_object("model_sampling")
+                adv["stabilizer_min_sigma"] = float(
+                    ms.percent_to_sigma(adv["stabilizer_end_percent"])
+                )
+            except Exception as e:
+                logger.warning(
+                    "[AnimaCrossAttn] failed to resolve stabilizer_end_percent "
+                    "%.3f: %s. Stabilizers stay active for the whole sampling pass.",
+                    adv["stabilizer_end_percent"],
+                    e,
+                )
+                adv["stabilizer_min_sigma"] = None
+
         artist_timing_routes = [None] * n
         if has_artist_timing_routes:
             try:
@@ -709,6 +780,55 @@ class AnimaArtistCrossAttn:
             )
 
         return (m, base_cond_out)
+
+
+class AnimaArtistPresetApply:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "model": ("MODEL",),
+                "artist_pack": ("ANIMA_PACK",),
+                "preset": ("ANIMA_PRESET", {
+                    "tooltip": (
+                        "Preset payload from Anima Artist Preset, Starter, or "
+                        "Recipe Load. It owns combine/fusion/strength."
+                    ),
+                }),
+                "enabled": ("BOOLEAN", {"default": True}),
+                "apply_to_uncond": ("BOOLEAN", {
+                    "default": False,
+                    "tooltip": "Default False. Applying style to uncond usually breaks CFG.",
+                }),
+            },
+            "optional": {
+                "advanced_options": ("ANIMA_OPTS", {
+                    "tooltip": (
+                        "Optional explicit option override. Leave disconnected "
+                        "when the preset alone is enough."
+                    ),
+                }),
+            },
+        }
+
+    RETURN_TYPES = ("MODEL", "CONDITIONING")
+    RETURN_NAMES = ("model", "base_prompt")
+    FUNCTION = "apply"
+    CATEGORY = "Anima/CrossAttn"
+
+    def apply(self, model, artist_pack, preset, enabled, apply_to_uncond,
+              advanced_options=None):
+        return AnimaArtistCrossAttn().patch(
+            model,
+            artist_pack,
+            COMBINE_OUTPUT_AVG,
+            FUSION_INTERPOLATE,
+            1.0,
+            enabled,
+            apply_to_uncond,
+            advanced_options=advanced_options,
+            preset=preset,
+        )
 
 
 class AnimaArtistProbe:

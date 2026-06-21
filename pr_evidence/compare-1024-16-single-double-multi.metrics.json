@@ -1,0 +1,49 @@
+{
+  "settings": {
+    "width": 1024,
+    "height": 1024,
+    "steps": 16,
+    "cfg": 5.0,
+    "sampler": "er_sde",
+    "scheduler": "beta",
+    "seed": 1098716302142360,
+    "unet": "Anima\\anime\\anima_baseV10.safetensors",
+    "clip": "qwen_3_06b_base.safetensors",
+    "vae": "qwen_image_vae.safetensors",
+    "base_prompt": "recent,\n\nAnd image of asuna yuuki and kirigaya suguha, together singing and dancing on stage as idols, dynamic pose.\n\nAsuna is wearing a red and white frilly idol dress. Long hair. White thighhigs. Panty peek. Hair ornament. Holding microphone.\n\nSuguha is wearing a blue and white frilly idol dress. Short hair. White thighhigs. Face, hair, breasts. Panty peek. Hair ornament. Holding microphone.\n\nRed and blue sparkling in the background.",
+    "negative_prompt": "deviantart, score_1, score_2, score_3, low resolution, worst quality, low quality, lowres, bad anatomy, bad hand, extra toes, jpeg, bad composition, chromatic aberration, censorship"
+  },
+  "inputs": [
+    "I:\\ComfyUI-aki-v1.6\\ComfyUI\\output\\anima_original_compare_current_20260620_141632.json",
+    "I:\\ComfyUI-aki-v1.6\\ComfyUI\\output\\anima_original_compare_original_20260620_142347.json"
+  ],
+  "comparisons": {
+    "workflow_single_yuchi": {
+      "original_vs_prompt_descriptor_distance": 0.1857948902695608,
+      "original_vs_prompt_mae": 0.11557276856665517,
+      "original_seconds": 24.374515500000598,
+      "current_vs_prompt_descriptor_distance": 0.1857948902695608,
+      "current_vs_prompt_mae": 0.11557276856665517,
+      "current_seconds": 20.81133189999946
+    },
+    "workflow_double_yuchi_momisan": {
+      "original_vs_prompt_descriptor_distance": 0.3448418185333659,
+      "original_vs_prompt_mae": 0.24668079451018687,
+      "original_seconds": 23.32994410000083,
+      "current_vs_prompt_descriptor_distance": 0.3448418185333659,
+      "current_vs_prompt_mae": 0.24668079451018687,
+      "current_seconds": 23.08075579999968
+    },
+    "workflow_multi_yuchi_momisan_tonee_umanosuke": {
+      "original_vs_prompt_descriptor_distance": 0.1435433615054384,
+      "original_vs_prompt_mae": 0.1312436122520297,
+      "original_seconds": 30.66959880000013,
+      "current_vs_prompt_descriptor_distance": 0.1435433615054384,
+      "current_vs_prompt_mae": 0.1312436122520297,
+      "current_seconds": 29.91561709999951
+    }
+  },
+  "prompt_consistency": [],
+  "avg_seconds": 24.17240525555563,
+  "contact_sheet": "I:\\ComfyUI-aki-v1.6\\ComfyUI\\output\\anima_original_compare_combined_20260620_142616.png"
+}

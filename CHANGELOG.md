@@ -2,6 +2,15 @@
 
 ## v26.1.0 (2026-06-21)
 
+### Per-artist layer range control
+- Layer routes now accept block percentages as well as block indices:
+  `artist@0%-33%`, `artist@33%-67%`, or normalized decimals such as
+  `artist@0.33-0.67`. Existing block routes like `artist@0-8` keep their
+  previous behavior.
+- Added `workflow/artist-layer-role-routing.json`, a bundled workflow that
+  demonstrates separate artists across background/composition,
+  character/body, and clothing/detail layer windows.
+
 ### v26 Syntax Enhancements (from upstream)
 - **Prefix weight syntax** (recommended): `1.5::wlop` instead of `wlop::1.5`
   - More intuitive for users copying from NovelAI-style prompts
@@ -101,37 +110,37 @@
   more aggressively than the legacy whole-row final-output lock while
   keeping `row` / `mixed` modes available for A/B comparisons.
 - **Stable-seed preset retune** — `stable_seed` now uses the content-safer
-  `output_avg + artist_static_capture + static_capture_k=4 +
+  `output_avg + mixed_delta_cap + mixed_delta_cap_ratio=0.75 +
   match_base_norm=False` path, with strength 1.0 and `layer_filter=9-20`
-  when `layer_mode=auto`. Live foreground-weighted A/B across portrait,
-  close-up, and street prompts reduced descriptor drift without the face,
-  clothing, and full-layer smear failures seen in anchor-heavy runs.
+  when `layer_mode=auto`. This keeps the real style-mixer path active while
+  capping extreme mixed deltas, after multi-artist evidence showed static
+  capture could over-constrain or wash out style.
 - **Scene-tuned low-drift presets** — added `drift_soft`, `face_lock`, and
   `scene_lock` to turn measured manual A/B combinations into one-click
-  choices. They keep the static-capture style lock: `drift_soft` lowers
-  strength for portraits, `face_lock` adds token norm locking plus
-  `base_preserve` for close-ups, and `scene_lock` uses a narrower
+  choices. `drift_soft` uses light EMA and lower strength for portraits,
+  `face_lock` adds token norm locking, `base_preserve`, and a mixed-delta cap
+  for close-ups, and `scene_lock` uses light EMA plus a narrower
   `base_preserve` layer window for explicit wide / background-heavy prompt
   shapes instead of claiming a single universal drift fix.
 - **`drift_auto` preset** — prompt- and artist-count-aware runtime routing that
   resolves from `AnimaArtistPack.base_prompt` and the active artist count.
-  4+ artist wide / background-heavy scenes use `face_lock` after live A/B
-  found it had the lowest average regret there, smaller explicit wide /
-  background-heavy scenes use `scene_lock`, 4+ artist simple fullbody prompts
-  use `drift_soft` after live A/B found it had the lowest average regret there,
-  4+ artist close-ups use `stable_seed` plus `mixed_delta_cap_ratio=0.75`
-  after live A/B lowered the worst seed-pair regret, 4+ artist street / urban
-  prompts use full-layer `compatibility_safe`, and other 4+ artist portrait /
-  broad-subject prompts use the internal `compatibility_safe_9_15` route after
-  live A/B made foreground, full, center, and upper-center reductions all
-  positive. Smaller close-ups use `face_lock`, and simpler portrait /
-  broad-subject prompts use `drift_soft`.
+  4+ artist wide / background-heavy scenes use `scene_lock`, 4+ artist simple
+  fullbody prompts use `drift_soft`, 4+ artist close-ups use `stable_seed`
+  plus `mixed_delta_cap_ratio=0.75`, and other 4+ artist portrait / street /
+  broad-subject prompts stay on `drift_soft`. Smaller close-ups use
+  `face_lock`, and simpler portrait / broad-subject prompts use `drift_soft`.
+  Compatibility concat routes are now explicit user choices instead of
+  automatic broad multi-artist routes, so artist-count changes stay visible.
   Inspector reports the resolved preset and reason so users can audit or
   manually override the decision. This is inference-time control, not training.
-- **`anchor_lock` preset** — preserves the previous measured-strong
-  4-anchor Q behavior (`anchor_seeds_count=4`, `layer_filter=9-25`,
-  `anchor_deep_layer_threshold=16`, strength 1.2) for workflows that prefer
-  the stronger fixed-anchor lock and accept its content-risk tradeoff.
+- **`anchor_lock` preset** — softened from the previous measured-strong
+  4-anchor Q behavior to one anchor with `anchor_user_blend=0.35`,
+  `layer_filter=9-15`, `anchor_deep_layer_threshold=12`, and strength 0.9
+  after evidence showed the stronger lock could introduce extra limbs.
+- **`identity_guard` preset retune** — moved from `lowrank_avg` to
+  `output_avg + base_preserve + match_base_norm + mixed_delta_cap` after the
+  10-artist evidence matrix showed the low-rank preset path was too slow for
+  a one-click mode. `lowrank_avg` remains available as an expert combine mode.
 - **`anchor_base_norm_ref` option** — optional A/B path for `anchor_q` +
   `match_base_norm` that uses the fixed anchor's base output as the norm
   reference instead of the current seed's base output.

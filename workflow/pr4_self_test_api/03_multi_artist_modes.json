@@ -1,0 +1,180 @@
+{
+  "1": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "Anima\\anime\\anima_baseV10.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "2": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_3_06b_base.safetensors",
+      "type": "stable_diffusion",
+      "device": "default"
+    }
+  },
+  "3": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    }
+  },
+  "4": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "@yuchi \\(salmon-1000\\), @uof, @kieed, @ciloranko, 1girl, solo, upper body portrait, face visible, white blouse, navy jacket, looking at viewer, simple background, clean linework, detailed eyes",
+      "clip": ["2", 0]
+    }
+  },
+  "5": {
+    "class_type": "AnimaArtistPack",
+    "inputs": {
+      "clip": ["2", 0],
+      "artist_chain": "@yuchi \\(salmon-1000\\), @uof, @kieed, @ciloranko",
+      "base_prompt": "1girl, solo, upper body portrait, face visible, white blouse, navy jacket, looking at viewer, simple background, clean linework, detailed eyes"
+    }
+  },
+  "18": {
+    "class_type": "AnimaArtistPreset",
+    "inputs": {
+      "preset": "balanced",
+      "intensity": 1.0,
+      "normalize_weights": true,
+      "layer_mode": "auto",
+      "custom_layer_filter": ""
+    }
+  },
+  "19": {
+    "class_type": "AnimaArtistPresetApply",
+    "inputs": {
+      "model": ["1", 0],
+      "artist_pack": ["5", 0],
+      "preset": ["18", 0],
+      "enabled": true,
+      "apply_to_uncond": false
+    }
+  },
+  "6": {
+    "class_type": "AnimaArtistPreset",
+    "inputs": {
+      "preset": "drift_auto",
+      "intensity": 1.0,
+      "normalize_weights": true,
+      "layer_mode": "auto",
+      "custom_layer_filter": ""
+    }
+  },
+  "20": {
+    "class_type": "AnimaArtistPresetApply",
+    "inputs": {
+      "model": ["1", 0],
+      "artist_pack": ["5", 0],
+      "preset": ["6", 0],
+      "enabled": true,
+      "apply_to_uncond": false
+    }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "nsfw, nude, naked, bare chest, cleavage, nipples, cropped head, head out of frame, lowres, worst quality, bad anatomy",
+      "clip": ["2", 0]
+    }
+  },
+  "8": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": 512,
+      "height": 512,
+      "batch_size": 1
+    }
+  },
+  "9": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["1", 0],
+      "positive": ["4", 0],
+      "negative": ["7", 0],
+      "latent_image": ["8", 0],
+      "seed": 42424242,
+      "steps": 8,
+      "cfg": 5.0,
+      "sampler_name": "er_sde",
+      "scheduler": "beta",
+      "denoise": 1.0
+    }
+  },
+  "10": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["19", 0],
+      "positive": ["19", 1],
+      "negative": ["7", 0],
+      "latent_image": ["8", 0],
+      "seed": 42424242,
+      "steps": 8,
+      "cfg": 5.0,
+      "sampler_name": "er_sde",
+      "scheduler": "beta",
+      "denoise": 1.0
+    }
+  },
+  "11": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["20", 0],
+      "positive": ["20", 1],
+      "negative": ["7", 0],
+      "latent_image": ["8", 0],
+      "seed": 42424242,
+      "steps": 8,
+      "cfg": 5.0,
+      "sampler_name": "er_sde",
+      "scheduler": "beta",
+      "denoise": 1.0
+    }
+  },
+  "12": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["9", 0],
+      "vae": ["3", 0]
+    }
+  },
+  "13": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["10", 0],
+      "vae": ["3", 0]
+    }
+  },
+  "14": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["11", 0],
+      "vae": ["3", 0]
+    }
+  },
+  "15": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["12", 0],
+      "filename_prefix": "anima_selftest_03_prompt"
+    }
+  },
+  "16": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["13", 0],
+      "filename_prefix": "anima_selftest_03_balanced"
+    }
+  },
+  "17": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["14", 0],
+      "filename_prefix": "anima_selftest_03_drift_auto"
+    }
+  }
+}

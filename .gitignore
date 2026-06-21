@@ -26,6 +26,15 @@ env/
 test_outputs/
 debug_*.png
 
-# live smoke-test scratch files (may contain personal prompts)
+# live smoke-test 临时文件（可能包含个人 prompt）
 tests/_*.json
 .drift_runs/
+
+# PR evidence 运行时临时文件
+pr_evidence/*.log
+pr_evidence/*.pid
+pr_evidence/*.db
+pr_evidence/*.db.lock
+pr_evidence/__pycache__/
+pr_evidence/comfy_matrix_base/
+pr_evidence/xy_preset_matrix_cells/
