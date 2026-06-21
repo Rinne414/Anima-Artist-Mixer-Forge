@@ -1108,6 +1108,15 @@ class WorkflowExampleTest(unittest.TestCase):
 
         self.assertIn("AnimaArtistPresetApply", node_types)
 
+    def test_sample_workflow_uses_preset_apply_without_advanced_options_node(self):
+        workflow_path = Path(REPO_ROOT) / "sample workflow.json"
+        data = json.loads(workflow_path.read_text(encoding="utf-8"))
+        node_types = {node.get("type") for node in data.get("nodes", [])}
+
+        self.assertIn("AnimaArtistPreset", node_types)
+        self.assertIn("AnimaArtistPresetApply", node_types)
+        self.assertNotIn("AnimaArtistOptions", node_types)
+
     def test_pr4_api_examples_use_preset_apply_for_preset_paths(self):
         workflow_dir = Path(REPO_ROOT) / "workflow" / "pr4_self_test_api"
         workflow_paths = sorted(workflow_dir.glob("*.json"))

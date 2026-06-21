@@ -504,14 +504,14 @@
     },
     {
       "id": 88,
-      "type": "AnimaArtistOptions",
+      "type": "AnimaArtistPreset",
       "pos": [
         1404.1825957184926,
         1126.0328667317556
       ],
       "size": [
-        316.7291015625,
-        370
+        330,
+        214
       ],
       "flags": {},
       "order": 4,
@@ -519,43 +519,45 @@
       "inputs": [],
       "outputs": [
         {
-          "name": "advanced_options",
-          "type": "ANIMA_OPTS",
+          "name": "preset",
+          "type": "ANIMA_PRESET",
           "links": [
             207
           ]
+        },
+        {
+          "name": "advanced_options",
+          "type": "ANIMA_OPTS",
+          "links": null
+        },
+        {
+          "name": "summary",
+          "type": "STRING",
+          "links": null
         }
       ],
       "properties": {
-        "Node name for S&R": "AnimaArtistOptions"
+        "Node name for S&R": "AnimaArtistPreset"
       },
       "widgets_values": [
-        0,
-        14,
-        0,
+        "balanced",
         1,
         true,
-        0,
-        1,
-        false,
-        6,
-        true,
-        2,
-        0.3,
-        14,
+        "auto",
         ""
-      ]
+      ],
+      "title": "Preset: balanced"
     },
     {
       "id": 87,
-      "type": "AnimaArtistCrossAttn",
+      "type": "AnimaArtistPresetApply",
       "pos": [
         1843.218968732128,
         588.2073084759128
       ],
       "size": [
-        291.55234375,
-        194
+        310,
+        214
       ],
       "flags": {},
       "order": 9,
@@ -572,10 +574,16 @@
           "link": 208
         },
         {
+          "name": "preset",
+          "shape": 7,
+          "type": "ANIMA_PRESET",
+          "link": 207
+        },
+        {
           "name": "advanced_options",
           "shape": 7,
           "type": "ANIMA_OPTS",
-          "link": 207
+          "link": null
         }
       ],
       "outputs": [
@@ -595,15 +603,13 @@
         }
       ],
       "properties": {
-        "Node name for S&R": "AnimaArtistCrossAttn"
+        "Node name for S&R": "AnimaArtistPresetApply"
       },
       "widgets_values": [
-        "output_avg",
-        "interpolate",
-        1,
         true,
         false
-      ]
+      ],
+      "title": "Apply preset: balanced"
     }
   ],
   "links": [
@@ -693,7 +699,7 @@
       0,
       87,
       2,
-      "ANIMA_OPTS"
+      "ANIMA_PRESET"
     ],
     [
       208,
