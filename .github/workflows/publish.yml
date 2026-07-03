@@ -18,6 +18,34 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
 
+      - name: Verify version matches CHANGELOG
+        run: |
+          python3 - <<'PY'
+          import re
+          import sys
+          import tomllib
+
+          with open("pyproject.toml", "rb") as fh:
+              project_version = tomllib.load(fh)["project"]["version"]
+
+          changelog_version = None
+          with open("CHANGELOG.md", encoding="utf-8") as fh:
+              for line in fh:
+                  match = re.match(r"^##\s+v([0-9][^\s(]*)", line)
+                  if match:
+                      changelog_version = match.group(1)
+                      break
+
+          if changelog_version is None:
+              sys.exit("publish guard: no '## v<version>' heading found in CHANGELOG.md")
+          if changelog_version != project_version:
+              sys.exit(
+                  f"publish guard: version mismatch - pyproject.toml={project_version!r} "
+                  f"vs top CHANGELOG.md entry=v{changelog_version!r}"
+              )
+          print(f"publish guard: OK - pyproject {project_version} == CHANGELOG v{changelog_version}")
+          PY
+
       - name: Publish Custom Node
         uses: Comfy-Org/publish-node-action@v1
         with:
