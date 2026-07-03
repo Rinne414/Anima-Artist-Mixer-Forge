@@ -10,6 +10,7 @@ from .anima_mixer.nodes_core import (
     AnimaArtistBasic,
     AnimaArtistCrossAttn,
     AnimaArtistPack,
+    AnimaArtistPresetApply,
     AnimaArtistProbe,
     AnimaArtistProbeReport,
 )
@@ -21,6 +22,7 @@ from .anima_mixer.nodes_ui import (
     AnimaArtistPreset,
     AnimaArtistRecipeLoad,
     AnimaArtistRecipeSave,
+    AnimaArtistSimpleOptions,
     AnimaArtistStarter,
 )
 
@@ -30,6 +32,7 @@ __all__ = [
     "AnimaArtistBasic",
     "AnimaArtistCrossAttn",
     "AnimaArtistPack",
+    "AnimaArtistPresetApply",
     "AnimaArtistProbe",
     "AnimaArtistProbeReport",
     "AnimaArtistChainBuilder",
@@ -39,5 +42,6 @@ __all__ = [
     "AnimaArtistPreset",
     "AnimaArtistRecipeLoad",
     "AnimaArtistRecipeSave",
+    "AnimaArtistSimpleOptions",
     "AnimaArtistStarter",
 ]

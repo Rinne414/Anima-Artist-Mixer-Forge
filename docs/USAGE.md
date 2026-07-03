@@ -6,7 +6,7 @@ This is a ComfyUI custom node that provides **multi-artist mixing** for the Anim
 
 The companion `AnimaArtistPack` node provides a one-shot experience: write your artist list in one text box (comma or newline separated) and your main prompt in another. The node automatically splits, encodes, and packages everything for downstream use.
 
-This README documents the **v26 architecture**. The default `balanced` preset stays close to the original artist mixer, while `prompt_passthrough` uses the no-mixer/direct-prompt path and `drift_auto` provides an opt-in low-drift route. Older versions are still functionally a subset.
+This guide documents the **v26 architecture**. The default `balanced` preset stays close to the original artist mixer, while `prompt_passthrough` uses the no-mixer/direct-prompt path and `drift_auto` provides an opt-in low-drift route. Older versions are still functionally a subset.
 
 v25.1 also adds per-artist layer routing, matching the original repository's first public feature request: different artists can now be injected into different DiT block ranges from the same artist chain.
 
@@ -102,7 +102,7 @@ ComfyUI/custom_nodes/<this-plugin-folder>/
 Restart ComfyUI. No extra dependencies.
 
 ## Quick start
-![workflow](docs/images/workflow.png)
+![workflow](images/workflow.png)
 
 ```
                           ┌──► artist_pack ──► AnimaArtistPresetApply ──► MODEL ──► KSampler
@@ -170,20 +170,16 @@ hiten
 
 Only the artist column is required. Bad weights are not silently swallowed; the guide reports them and falls back to `1.0`.
 
+`AnimaArtistStarter` exposes only the four recommended recipes:
+
 | Recipe | Best use |
 |---|---|
-| `prompt_passthrough` | Direct prompt/no-mixer route while keeping positive artist weight syntax |
 | `balanced` | Default first run |
 | `strong_style` | Stronger visual style |
-| `stable_seed` | Same prompt across many seeds |
-| `drift_auto` | Explicit opt-in automatic low-drift routing from `base_prompt` |
-| `drift_soft` | Portrait / broad-subject prompts with softer style lock |
-| `face_lock` | Close-up face prompts |
-| `scene_lock` | Explicit wide / background-heavy scene prompts |
-| `anchor_lock` | Stronger fixed-anchor seed lock |
-| `fast_preview` | Fast exploration |
-| `identity_guard` | Preserve character/object identity |
-| `compatibility_safe` | Regional prompts, Forge Couple-style routing, attention masks, or other cross-attention patch nodes |
+| `drift_auto` | Opt-in automatic low-drift routing from `base_prompt` |
+| `prompt_passthrough` | Direct prompt / no-mixer route while keeping positive artist weight syntax |
+
+For `stable_seed`, `drift_soft`, `face_lock`, `scene_lock`, `anchor_lock`, `fast_preview`, `identity_guard`, and `compatibility_safe`, use [`AnimaArtistPreset`](#animaartistpreset-one-click-helper) instead — it accepts all twelve presets.
 
 Recommended start:
 
@@ -192,12 +188,7 @@ recipe = balanced
 layout = layer_scheduled
 ```
 
-If a workflow already uses regional prompting or another attention patcher, start with:
-
-```
-recipe = compatibility_safe
-layout = layer_scheduled
-```
+If a workflow already uses regional prompting or another attention patcher, switch to `AnimaArtistPreset(preset = compatibility_safe)`; `compatibility_safe` is not one of Starter's four recipes.
 
 ### AnimaArtistChainBuilder (UX helper)
 
@@ -294,6 +285,23 @@ Outputs:
 
 This is the one-click preset helper. Start with `balanced` for predictable artist mixing; choose `drift_auto` only when you explicitly want automatic low-drift routing. Use `prompt_passthrough` when you want the no-mixer/direct-prompt path, with positive artist weights converted into normal prompt weighting and no attention patch.
 
+Unlike `AnimaArtistStarter` (four recommended recipes), this node exposes all twelve presets. Pick by goal:
+
+| Preset | Best use |
+|---|---|
+| `prompt_passthrough` | Direct prompt / no-mixer route while keeping positive artist weight syntax |
+| `balanced` | Default first run |
+| `strong_style` | Stronger visual style |
+| `stable_seed` | Same prompt across many seeds |
+| `drift_auto` | Opt-in automatic low-drift routing from `base_prompt` |
+| `drift_soft` | Portrait / broad-subject prompts with softer style lock |
+| `face_lock` | Close-up face prompts |
+| `scene_lock` | Explicit wide / background-heavy scene prompts |
+| `anchor_lock` | Stronger fixed-anchor seed lock |
+| `fast_preview` | Fast exploration |
+| `identity_guard` | Preserve character/object identity |
+| `compatibility_safe` | Regional prompts, Forge Couple-style routing, attention masks, or other cross-attention patch nodes |
+
 | Preset | What it does |
 |---|---|
 | `prompt_passthrough` | No mixer path. Builds a direct prompt from the artist chain and base prompt, converts positive artist weights to normal prompt weights like `(@artist:1.2)`, and returns the unpatched model |
@@ -367,6 +375,8 @@ Not connecting this node = default behavior. Prefer `AnimaArtistSimpleOptions` f
 | `lowrank_k` | Low-rank truncation rank for `lowrank_avg`. 1 = most stable |
 | `artist_static_capture` | Freeze artist attention after `static_capture_k` warmup steps |
 | `static_capture_k` | Number of warmup steps before freezing. Default 6, range 1~12 |
+| `static_capture_mode` | What static capture freezes: `output` (default), `delta`, `blend`, or `blend_perp`. `output` is the strongest lock; the others reintroduce progressively more base motion |
+| `static_capture_blend_alpha` | Used by `static_capture_mode` `blend` / `blend_perp`. Range 0~1, default 0.25. Higher returns more base motion; lower keeps the freeze stronger |
 | `artist_anchor_q` | Replace user-seed Q with a fixed-seed anchor's Q. The strongest cross-seed stabilizer |
 | `anchor_seeds_count` | Number of anchor seeds to average. Default 1, range 1~4 |
 | `anchor_user_blend` | Blend ratio between anchor Q and user Q. 0 = pure anchor, 1 = pure user |
@@ -469,7 +479,7 @@ V = [V_base, V_artist]
 out = cross_attn(x, K, V)
 ```
 
-The softmax decides per-pixel-position whether to attend to base or artist. With `strength < 1`, the result is mixed once more with a pure-base output.
+The softmax decides per-position whether to attend to base or artist tokens. Under `combine_mode = concat`, this concatenated-attention output is used as-is — `strength` is ignored on the concat path. Only the `output_avg` / `lowrank_avg` paths interpolate the merged artist output toward base by `strength`.
 
 Pros: base prompt stays in the attention computation, so prompt adherence is best preserved. Artist still dominates style, but with the lightest drift.
 
@@ -864,6 +874,16 @@ wlop, 0.3::krenz::
 
 This keeps wlop dominant with a krenz accent, without breaking total-contribution stability.
 
+### v26 parsing and preview refinements
+
+Recent parsing updates make chains more forgiving and previews more informative:
+
+- **Bare-percent timing**: `%timing` windows accept bare percent numbers. `%0-45` is read as `0%-45%` — any timing value greater than 1 is divided by 100, so `%0-45` and `%0.0-0.45` describe the same window.
+- **Layer routes that match no block**: a layer route resolving to zero blocks (for example `@30-40` on a 28-block model) now disables that artist's injection and is flagged in `AnimaArtistChainPreview` / `AnimaArtistInspector`, instead of silently falling back to injecting on every layer.
+- **Explicit `1::name::` weights are preserved**: `AnimaArtistChainPreview`'s `cleaned_chain` keeps an explicit `1::name::` weight rather than dropping it, because an explicit weight of exactly `1.0` intentionally disables weight normalization at runtime.
+- **Full-width comma in base-prompt weights**: base-prompt tag weighting (`1.5::tag::`) honors the full-width comma `，` as a boundary, so mixed-width tag lists expand correctly.
+- **Sharper preview warnings**: `AnimaArtistChainPreview` warns when a parsed artist name still contains `::`, a full-width marker, or a route-shaped tail, and it restates the `@layers` vs `%timing` distinction so a mistyped route is caught before CLIP encoding.
+
 ## Advanced layer/step controls
 
 ### Layer range (`start_block` / `end_block`)
@@ -905,7 +925,7 @@ Diagnosis: reset `start_percent / end_percent` to 0.0 / 1.0 and disable all stab
 
 ### Cross-attention patch conflicts
 
-This node replaces `diffusion_model.blocks[i].cross_attn` through ComfyUI object patches. Nodes that also rewrite the same cross-attention modules can interact in non-obvious ways:
+This node patches `diffusion_model.blocks[i].cross_attn.forward` through ComfyUI object patches, leaving the attention module itself in the model tree. Nodes that also rewrite the same cross-attention modules can interact in non-obvious ways:
 
 - regional prompting / area composition nodes
 - Forge Couple-style prompt routing ports
@@ -939,4 +959,4 @@ Special thanks to **汐浮尘** for co-development, testing, and design contribu
 
 ## License
 
-MIT License. See [LICENSE](LICENSE) for the full text.
+MIT License. See [LICENSE](../LICENSE) for the full text.

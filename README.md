@@ -2,7 +2,7 @@
 
 A ComfyUI custom node that enables **multi-artist mixing** for the Anima model by hooking into its cross-attention layers.
 
-![surtr](docs/images/ComfyUI_01092_.png)
+![surtr](docs/images/hero.jpg)
 ## What it does
 
 Anima uses an LLM as its text encoder. When multiple artist tags are stacked in a single prompt, the LLM's contextualization causes them to interfere with each other, producing a conditioning that resembles neither artist clearly. This node encodes each artist independently and mixes them at the model's cross-attention layer, sidestepping the interference at the prompt-encoding stage.
@@ -20,8 +20,8 @@ The current release (v26) keeps the original controllable artist-mixer path, the
 - [Layer role workflow](workflow/artist-layer-role-routing.json) — character / clothing / background routing example
 - [Full documentation](docs/USAGE.md) — usage, parameters, modes, stabilizers, performance tips
 - [Changelog](CHANGELOG.md) — version history
-- [Issues](../../issues) — bug reports, feature requests
-- [Discussions](../../discussions) — usage questions, results sharing
+- [Issues](https://github.com/An1X3R/Anima-Artist-Mixer/issues) — bug reports, feature requests
+- [Discussions](https://github.com/An1X3R/Anima-Artist-Mixer/discussions) — usage questions, results sharing
 
 ## Installation
 
@@ -41,6 +41,22 @@ Restart ComfyUI. No extra dependencies.
 
 ## Quick start
 ![workflow](docs/images/workflow.png)
+
+### One-node quick start: AnimaArtistBasic
+
+For the simplest setup, use **Anima Artist Basic (Recommended)**. It wraps
+`AnimaArtistPack + AnimaArtistPreset + AnimaArtistPresetApply` in a single node:
+
+- `model` / `clip` — your Anima model and its Anima-compatible CLIP loader
+- `artist_chain` — your artists, comma or newline separated
+- `base_prompt` — your main prompt (do not repeat artist names here)
+- `preset` — `balanced` (default), `strong_style`, `drift_auto`, or `prompt_passthrough`
+- `intensity` — preset strength multiplier, range `0`–`2` (default `1.0`)
+- `enabled` — master switch
+
+Wire its `model` output to KSampler's `model` input and its `base_prompt` output to
+KSampler's positive input. Move to the multi-node route below when you need presets
+beyond those four, per-artist layer/timing routing, recipes, or the inspector.
 
 Open [`sample workflow.json`](<sample workflow.json>) first. It uses the current
 `AnimaArtistPack -> AnimaArtistPresetApply` preset route and avoids the old
@@ -65,6 +81,7 @@ windows.
 - For common layer/timing tweaks, use `AnimaArtistSimpleOptions`; keep `AnimaArtistOptions (Expert)` for stabilizer A/B and debugging
 - If the workflow also uses regional prompting, Forge Couple-style routing, or other attention patchers, start with `preset = compatibility_safe`
 - When a workflow behaves strangely, connect `AnimaArtistInspector` and read the effective weights / warnings directly in ComfyUI
+- Report/preview nodes (`AnimaArtistInspector`, `AnimaArtistChainPreview`, `AnimaArtistProbeReport`, `AnimaArtistStarter`) print through the node's own `ui.text` panel; on older ComfyUI frontends that do not render it, wire the node's `STRING` output into a Show Text node instead
 
 For full parameter explanations and recommended combinations, see [docs/USAGE.md](docs/USAGE.md).
 
@@ -183,7 +200,7 @@ The implementation lives in the `anima_mixer/` package (`nodes.py` is a compatib
 python -m pytest -q
 ```
 
-CI runs `ruff` plus `unittest` on Python 3.10/3.12 for every push and PR.
+CI runs `ruff` plus `pytest` on Python 3.10/3.12 for pushes to main and all PRs.
 
 ## Acknowledgements
 
