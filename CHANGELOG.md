@@ -1,5 +1,102 @@
 # Changelog
 
+## v26.2.0 (2026-07-04)
+
+Fixes from a full four-track review (parsing, runtime state lifecycle,
+node integration, docs/packaging/CI). No node signatures changed; existing
+workflows keep loading.
+
+### Parsing / chain syntax
+- Fixed phantom artists from comma layer routes inside weighted entries:
+  `1.2::wlop@0,2,4::` and `wlop@0,2,4::1.2` now parse as one artist with
+  route `{0,2,4}` instead of splitting off a bogus artist (previously
+  `wlop@0,2,4::1.2` even produced a phantom artist named "1.2" at weight 4).
+- A layer route that matches no blocks (e.g. `@30-40` on a 28-block model)
+  now disables that artist's injection and reports a warning, instead of
+  silently inverting to "inject into all layers".
+- Timing routes accept bare percent values: `%0-45` reads as 0%-45%
+  (values above 1 divide by 100, like layer routes); nonsense windows are
+  rejected loudly instead of clamping to "always active".
+- Full-width `，` is honored in base-prompt `1.5::tag::` expansion.
+- `::name::` (decorative, no weight) strips its colons; double-weight
+  entries like `1.5::wlop::0.8` keep the prefix weight and warn instead of
+  encoding a `::0.8` remnant into the artist name.
+- NaN weights are rejected as invalid input instead of clamping to 4.0.
+- New chain lint surfaced in ChainPreview, Inspector, and the Pack log:
+  leftover `::` markers, full-width route punctuation, swallowed
+  route-shaped tails, and the `@layers` vs `%timing` confusion now warn.
+- ChainPreview's `cleaned_chain` preserves explicit `1::name::` weights
+  (an explicit 1.0 intentionally disables weight normalization) and no
+  longer truncates weight precision.
+- An explicit weight past the 32-artist truncation limit no longer leaks
+  `has_explicit` into the surviving chain.
+
+### Recipes
+- Recipe JSON is now range-validated on load with the same bounds as the
+  UI widgets (out-of-range values clamp with a warning; string booleans
+  like `"false"` parse correctly instead of inverting).
+- Recipes remember their source preset (format v2): a saved `drift_auto`
+  recipe re-resolves its route against the real prompt at apply time
+  instead of baking the empty-prompt fallback. v1 recipes load unchanged.
+
+### Runtime state lifecycle
+- A layer that hits an exception now falls back only for the rest of that
+  run; a unified run-start reset clears disabled layers, EMA/static caches,
+  and warning latches on the next queue. Previously one failure disabled
+  the layer silently for as long as ComfyUI cached the patched model.
+- Out-of-memory errors and interrupt exceptions propagate instead of being
+  swallowed by the per-layer fallback.
+- `artist_static_capture` correctly resets between runs; re-queueing with a
+  new seed no longer reuses the previous generation's frozen artist outputs.
+- `concat_with_base` no longer pads non-injected (uncond) rows with zero
+  K/V tokens — uncond rows now get exactly the base output, keeping CFG
+  intact on the `fast_preview` / `compatibility_safe` paths.
+- EMA and static caches are keyed per forward fingerprint, so multiple
+  positive conds or VRAM-split batches at the same sigma no longer
+  cross-contaminate; the EMA cache also honors `low_vram_cache` now.
+- Anchor pre-run pairs `t5xxl_ids`/`t5xxl_weights` with the same cond row
+  as the context (uncond-first CFG batches were mispaired), skips forwards
+  that carry no cond row, and disables itself with a warning when the
+  wrappers captured nothing (instead of re-running the pre-pass every step).
+- Static capture on the `combine=concat` path folds the effective
+  weight*fade into its cache fingerprint, so freezing mid-fade cannot lock
+  a stale weight.
+- When another wrapper hides the sampling sigma, EMA/static capture skip
+  with one warning instead of accumulating garbage.
+- Chaining two mixer nodes over the same blocks now logs which blocks the
+  later node overrides.
+
+### Probe
+- AnimaArtistProbe rejects non-Anima models with a clear error, restricts
+  its delta measurement to cond rows under CFG, resets its statistics at
+  run start (seed changes no longer mix trajectories), enforces its step
+  budget even when the sigma is not visible, and reports per-artist sample
+  counts.
+
+### Nodes / UX
+- AnimaArtistBasic caches its internal artist pack, so changing only
+  preset/intensity no longer re-encodes every artist.
+- The root package shim re-exports AnimaArtistPresetApply and
+  AnimaArtistSimpleOptions; real import errors are no longer masked by the
+  compatibility fallback.
+
+### Docs / packaging / CI
+- CI switched from `unittest discover` to pytest (+ pillow): the v26
+  syntax tests were previously never collected in CI.
+- Publishing now verifies pyproject version == top CHANGELOG entry.
+- `sample workflow.json` no longer requires a third-party NVIDIA node or
+  personal LoRA files, and uses the prefix weight syntax.
+- Removed the broken legacy `workflow/Shift testing.before-basic-simplify.json`
+  and a junk image; recompressed the hero image (2.7 MB → JPEG).
+- Bundled workflows share one model filename (`anima-base-v1.0.safetensors`).
+- New regression test validates every bundled workflow JSON against the
+  current node definitions (node types, widget counts, link integrity).
+- README documents AnimaArtistBasic; USAGE fixes broken relative links,
+  documents `static_capture_mode`/`static_capture_blend_alpha`, corrects
+  the `concat_with_base` strength description and the stale
+  "replaces cross_attn" wording, and moves the full 12-preset table to the
+  AnimaArtistPreset section (the Starter widget only offers 4 recipes).
+
 ## v26.1.0 (2026-06-21)
 
 ### Per-artist layer range control
@@ -36,8 +133,6 @@
   - Handles workflows where same model is used by multiple samplers
   - Tested and verified with user-reported workflow
 
-## v26.0.0 (2026-06-11)
-
 ### 2026-06-19 PR feedback fixes
 - Patched cross-attention at the `cross_attn.forward` object-patch level
   instead of replacing the full attention module. This keeps state-dict
@@ -60,9 +155,11 @@
 - Added `AnimaArtistBasic`, a minimal entry point that wraps
   `Pack + Preset + CrossAttn`.
 - Added a complete example workflow at
-  `workflow/Shift testing.before-basic-simplify.json` and documented it in
-  README / USAGE as a direct importable example.
+  `workflow/Shift testing.before-basic-simplify.json` as a direct importable
+  example. (This file was later removed from the package.)
 - Kept `AnimaArtistOptions` as an advanced/debug node instead of removing it.
+
+## v26.0.0 (2026-06-11)
 
 ### Restructure
 - Split the 2,600-line `nodes.py` into the `anima_mixer` package
