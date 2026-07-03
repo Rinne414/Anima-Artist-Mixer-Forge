@@ -938,9 +938,12 @@ class ChainBuilderTest(unittest.TestCase):
             num_blocks=28,
         )
 
+        # The 1.0 weight was written explicitly (1.0::...::), which disables
+        # runtime normalize_weights; the cleaned chain must preserve that by
+        # re-emitting 1::...:: rather than collapsing to a bare name.
         self.assertEqual(
             cleaned,
-            "@artist1%0.0-0.5\n@artist2%0.5-1.0",
+            "1::@artist1%0.0-0.5::\n1::@artist2%0.5-1.0::",
         )
         self.assertIn("@artist1 :: 1 % 0.0-0.5", report)
         self.assertNotIn("invalid layer route kept", report)

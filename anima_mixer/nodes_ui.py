@@ -705,8 +705,9 @@ class AnimaArtistStarter:
                 "intensity": ("FLOAT", {
                     "default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05,
                     "tooltip": (
-                        "Recipe strength multiplier. compatibility_safe, "
-                        "fast_preview, and prompt_passthrough do not scale strength."
+                        "Recipe strength multiplier for balanced, strong_style, "
+                        "and drift_auto. prompt_passthrough ignores it "
+                        "(direct prompt, no mixer)."
                     ),
                 }),
             },
@@ -1058,6 +1059,7 @@ class AnimaArtistRecipeSave:
         )
         recipe_json = serialize_recipe(
             artist_chain, combine_mode, fusion_mode, strength, adv, notes,
+            source_preset=preset,
         )
         return {"ui": {"text": [recipe_json]}, "result": (recipe_json,)}
 
@@ -1087,22 +1089,43 @@ class AnimaArtistRecipeLoad:
 
     def load(self, recipe_json):
         payload, warnings = deserialize_recipe(recipe_json)
-        preset_payload = {
-            "preset": "recipe",
-            "combine_mode": payload["combine_mode"],
-            "fusion_mode": payload["fusion_mode"],
-            "strength": payload["strength"],
-            "advanced_options": payload["advanced_options"],
-        }
+        source_preset = payload.get("preset") or ""
+        if source_preset == PRESET_DRIFT_AUTO:
+            # Rebuild the deferred preset so AnimaArtistPresetApply re-resolves
+            # drift_auto against the real base_prompt at patch time, instead of
+            # replaying the empty-prompt route baked in at save time.
+            preset_payload = build_preset_payload(
+                PRESET_DRIFT_AUTO,
+                payload.get("preset_intensity", 1.0),
+                payload.get("preset_layer_mode") or LAYER_MODE_AUTO,
+                payload.get("preset_custom_layer_filter", ""),
+                payload["advanced_options"].get("normalize_weights", True),
+            )
+            advanced_options_out = preset_payload["advanced_options"]
+        else:
+            preset_payload = {
+                "preset": "recipe",
+                "combine_mode": payload["combine_mode"],
+                "fusion_mode": payload["fusion_mode"],
+                "strength": payload["strength"],
+                "advanced_options": payload["advanced_options"],
+            }
+            advanced_options_out = payload["advanced_options"]
         lines = [
             "Anima Artist Recipe",
             "",
             f"status: {'CHECK' if warnings else 'OK'}",
+            f"preset: {source_preset or 'recipe (baked options)'}",
             f"combine_mode: {payload['combine_mode']}",
             f"fusion_mode: {payload['fusion_mode']}",
             f"strength: {payload['strength']:.2f}",
             f"artists: {len(split_artist_chain(payload['artist_chain']))}",
         ]
+        if source_preset == PRESET_DRIFT_AUTO:
+            lines.append(
+                "drift_auto: re-resolves at AnimaArtistPresetApply time from the "
+                "real base_prompt (values above are the empty-prompt preview)"
+            )
         if payload["notes"]:
             lines.extend(["", "notes:", f"  {payload['notes']}"])
         lines.extend(["", "warnings:"])
@@ -1121,5 +1144,5 @@ class AnimaArtistRecipeLoad:
         return {
             "ui": {"text": [summary]},
             "result": (payload["artist_chain"], preset_payload,
-                       payload["advanced_options"], summary),
+                       advanced_options_out, summary),
         }

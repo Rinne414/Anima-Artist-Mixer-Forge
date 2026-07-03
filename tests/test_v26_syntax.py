@@ -52,11 +52,11 @@ class TestPrefixWeightSyntax:
         assert has_explicit is False
 
     def test_weight_clamping(self):
-        """Weights should be clamped to [0.0, 4.0]"""
+        """Artist injection weights clamp to [WEIGHT_MIN, WEIGHT_MAX] = [-4.0, 4.0]"""
         parts = ["5.0::wlop", "-2.0::krenz"]
         names, weights, has_explicit = parse_artist_weights(parts)
         assert names == ["wlop", "krenz"]
-        assert weights == [4.0, -2.0]  # 5.0 clamped to 4.0, -2.0 is valid
+        assert weights == [4.0, -2.0]  # 5.0 clamped to 4.0, -2.0 is valid (negative allowed)
         assert has_explicit is True
 
     def test_invalid_weight_keeps_raw(self):

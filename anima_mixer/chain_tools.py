@@ -10,11 +10,12 @@ from .constants import (
 )
 from .options import format_bool
 from .parsing import (
+    _is_float,
     _is_layer_route_segment,
     clamp_float,
+    parse_artist_entries,
     parse_artist_layer_routes,
     parse_artist_timing_routes,
-    parse_artist_weights,
     parse_layer_filter,
     parse_timing_filter,
     resolve_artist_layer_routes,
@@ -86,20 +87,22 @@ def sanitize_artist_name_for_builder(name):
     return str(name or "").strip()
 
 
-def format_weighted_artist_name(name, weight):
+def format_weighted_artist_name(name, weight, explicit=False):
     weight = clamp_float(weight, WEIGHT_MIN, WEIGHT_MAX)
-    if abs(weight - 1.0) <= 1e-6:
+    # An explicit weight of exactly 1.0 must survive the round-trip: it disables
+    # runtime normalize_weights, so re-emit ``1::name::`` rather than a bare name.
+    if not explicit and abs(weight - 1.0) <= 1e-6:
         return name
-    return f"{weight:.3g}::{name}::"
+    return f"{weight:g}::{name}::"
 
 
-def format_weighted_artist_entry(name, weight, layer_route, timing_route):
+def format_weighted_artist_entry(name, weight, layer_route, timing_route, explicit=False):
     target = str(name or "").strip()
     if layer_route:
         target = f"{target}@{layer_route}"
     if timing_route:
         target = f"{target}%{timing_route}"
-    return format_weighted_artist_name(target, weight)
+    return format_weighted_artist_name(target, weight, explicit)
 
 
 def _format_route_float(value):
@@ -162,6 +165,8 @@ def parse_builder_artist_table(artist_table, return_warnings=False):
         if len(parts) > 1 and parts[1]:
             try:
                 weight = float(parts[1])
+                if weight != weight:  # NaN would crash clamp_float downstream
+                    raise ValueError("NaN weight")
             except ValueError:
                 label = name or "(empty artist)"
                 warnings.append(f"invalid weight for {label}: {parts[1]}; using 1.0")
@@ -241,11 +246,74 @@ def build_artist_chain_from_rows(layout, rows, num_blocks=28, extra_warnings=Non
     return chain, "\n".join(lines)
 
 
+def lint_parsed_artists(names, layer_route_texts, timing_route_texts,
+                        chain_text, num_blocks=None):
+    """Return human-readable hints about likely artist-chain syntax mistakes.
+
+    Covers leftover ``::`` weight markers, full-width route punctuation, tails
+    that look like a route but never got extracted, and the classic ``@`` vs
+    ``%`` (layer range vs sampling window) confusion.
+    """
+    warnings = []
+    names = list(names or [])
+    layer_route_texts = list(layer_route_texts or [])
+    timing_route_texts = list(timing_route_texts or [])
+    chain_text = str(chain_text or "")
+
+    layer_charset = set("0123456789,- ，.%")
+    timing_charset = set("0123456789.-~ ")
+
+    for name in names:
+        label = str(name or "")
+        if "::" in label or "：：" in label:
+            warnings.append(
+                f"artist {label!r} still contains '::' — check the weight "
+                "syntax (expected W::name::)"
+            )
+        if any(ch in label for ch in "＠％～"):
+            warnings.append(
+                f"artist {label!r} uses full-width ＠/％/～; only ASCII @ % ~ "
+                "are route markers"
+            )
+        for marker, charset in (("@", layer_charset), ("%", timing_charset)):
+            if marker in label:
+                suffix = label.rsplit(marker, 1)[-1].strip()
+                if suffix and all(ch in charset for ch in suffix):
+                    warnings.append(
+                        f"artist {label!r} ends in a route-shaped {marker} tail; "
+                        "it may be a swallowed route"
+                    )
+                    break
+
+    # @lo-hi values that all look like sampling fractions (contain '.', <= 1.0)
+    # while the chain never uses % — the user probably meant a timing window.
+    if "%" not in chain_text:
+        fraction_like = []
+        for route in layer_route_texts:
+            for token in str(route or "").replace("，", ",").split(","):
+                for value in token.split("-"):
+                    value = value.strip().rstrip("%")
+                    if not value:
+                        continue
+                    fraction_like.append(
+                        "." in value and _is_float(value) and 0.0 <= float(value) <= 1.0
+                    )
+        if fraction_like and all(fraction_like):
+            warnings.append(
+                "@lo-hi is a LAYER range; use %lo-hi for sampling timing"
+            )
+    return warnings
+
+
 def format_artist_chain_preview(artist_chain, num_blocks=28):
     parts = split_artist_chain(artist_chain)
     clean_timing_parts, timing_routes = parse_artist_timing_routes(parts)
     clean_layer_parts, layer_routes = parse_artist_layer_routes(clean_timing_parts)
-    names, weights, has_explicit = parse_artist_weights(clean_layer_parts)
+    entries = parse_artist_entries(clean_layer_parts)
+    names = [name for name, _, _ in entries]
+    weights = [weight for _, weight, _ in entries]
+    explicits = [explicit for _, _, explicit in entries]
+    has_explicit = any(explicits)
 
     warnings = []
     for raw, clean, timing in zip(parts, clean_timing_parts, timing_routes):
@@ -257,16 +325,27 @@ def format_artist_chain_preview(artist_chain, num_blocks=28):
             if not _is_layer_route_segment(suffix):
                 continue
             warnings.append(f"invalid layer route kept as artist text: {raw}")
+    # Surface out-of-range layer routes that resolve to no blocks (FIX 2).
+    resolve_warnings = []
+    resolve_artist_layer_routes(layer_routes, num_blocks, resolve_warnings)
+    warnings.extend(resolve_warnings)
     if len(names) > MAX_ARTISTS:
         warnings.append(f"artist count {len(names)} exceeds MAX_ARTISTS={MAX_ARTISTS}; Pack will truncate")
     if has_explicit:
         warnings.append("::weight detected; runtime normalize_weights will be bypassed")
     if any(w < 0.0 for w in weights):
         warnings.append("negative ::weight detected; those artists subtract style instead of adding it")
+    warnings.extend(
+        lint_parsed_artists(names, layer_routes, timing_routes, artist_chain, num_blocks)
+    )
 
     cleaned_entries = []
-    for label, weight, layer_route, timing_route in zip(names, weights, layer_routes, timing_routes):
-        entry = format_weighted_artist_entry(label, weight, layer_route, timing_route)
+    for label, weight, explicit, layer_route, timing_route in zip(
+        names, weights, explicits, layer_routes, timing_routes,
+    ):
+        entry = format_weighted_artist_entry(
+            label, weight, layer_route, timing_route, explicit,
+        )
         cleaned_entries.append(entry)
     cleaned_chain = "\n".join(cleaned_entries)
     status = "CHECK" if warnings else "OK"

@@ -129,4 +129,6 @@ CHAIN_LAYOUT_CHOICES = [
 DEFAULT_NUM_BLOCKS = 28  # Anima/MiniTrainDIT default DiT block count
 
 RECIPE_FORMAT = "anima-artist-recipe"
-RECIPE_VERSION = 1
+# v2 stores the source preset name so a deferred preset (drift_auto) re-resolves
+# against the real base_prompt at patch time instead of baking a stale route.
+RECIPE_VERSION = 2
