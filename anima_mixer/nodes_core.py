@@ -6,9 +6,10 @@ import uuid
 import torch
 
 from .anchor import make_sigma_capture
-from .chain_tools import format_layer_span
+from .chain_tools import format_layer_span, lint_parsed_artists
 from .constants import (
     COMBINE_CHOICES,
+    COMBINE_CONCAT,
     COMBINE_LOWRANK_AVG,
     COMBINE_OUTPUT_AVG,
     FUSION_BASE_PRESERVE,
@@ -34,9 +35,9 @@ from .options import build_preset_payload, merge_runtime_options
 from .parsing import (
     build_passthrough_prompt,
     expand_prompt_weights,
+    parse_artist_entries,
     parse_artist_layer_routes,
     parse_artist_timing_routes,
-    parse_artist_weights,
     resolve_artist_layer_routes,
     resolve_artist_timing_routes,
     resolve_target_blocks_from_options,
@@ -70,6 +71,15 @@ ANY_TYPE = AnyType("*")
 # pin the diffusion model and artist tensors in memory across runs.
 PROBE_REGISTRY = {}
 _PROBE_REGISTRY_LIMIT = 8
+
+# Small FIFO memo so AnimaArtistBasic does not re-encode every artist when only
+# preset/intensity change. Keyed by (chain, prompt); a hit additionally
+# requires the pack's stored clip to be the SAME object (identity check) —
+# id()-based keys are unsafe because CPython reuses a freed clip's address for
+# its replacement, which would silently serve conditionings from the old
+# text encoder.
+_BASIC_PACK_CACHE = {}
+_BASIC_PACK_CACHE_LIMIT = 4
 
 
 def _registry_store(probe_id, state):
@@ -137,7 +147,14 @@ class AnimaArtistPack:
         parts = split_artist_chain(artist_chain)
         parts, timing_routes = parse_artist_timing_routes(parts)
         parts, layer_routes = parse_artist_layer_routes(parts)
-        names, parsed_weights, has_explicit = parse_artist_weights(parts)
+        entries = parse_artist_entries(parts)
+        names = [entry[0] for entry in entries]
+        parsed_weights = [entry[1] for entry in entries]
+        explicit_flags = [entry[2] for entry in entries]
+        has_explicit = any(explicit_flags)
+
+        for hint in lint_parsed_artists(names, layer_routes, timing_routes, raw_artist_chain):
+            logger.warning("[AnimaArtistPack] %s", hint)
 
         # v26: Expand weight::target:: syntax in base_prompt
         base = expand_prompt_weights((base_prompt or "").strip())
@@ -171,8 +188,13 @@ class AnimaArtistPack:
             )
             names = names[:MAX_ARTISTS]
             parsed_weights = parsed_weights[:MAX_ARTISTS]
+            explicit_flags = explicit_flags[:MAX_ARTISTS]
             layer_routes = layer_routes[:MAX_ARTISTS]
             timing_routes = timing_routes[:MAX_ARTISTS]
+            # An explicit weight only on a truncated entry must not leak into
+            # the surviving chain: it would disable normalization and skip the
+            # weight-sum guard for 32 weight-1.0 artists.
+            has_explicit = any(explicit_flags)
 
         conditionings = []
         for name in names:
@@ -190,7 +212,7 @@ class AnimaArtistPack:
             logger.info(
                 "[AnimaArtistPack] %d artists carry ::weight syntax; the linear "
                 "injection path will be used",
-                sum(1 for w in parsed_weights if w != 1.0),
+                sum(1 for flag in explicit_flags if flag),
             )
 
         return ({
@@ -249,7 +271,13 @@ class AnimaArtistBasic:
     CATEGORY = "Anima/CrossAttn"
 
     def apply(self, model, clip, artist_chain, base_prompt, preset, intensity, enabled):
-        artist_pack = AnimaArtistPack().pack(clip, artist_chain, base_prompt)[0]
+        cache_key = (artist_chain, base_prompt)
+        artist_pack = _BASIC_PACK_CACHE.get(cache_key)
+        if artist_pack is None or artist_pack.get("clip") is not clip:
+            artist_pack = AnimaArtistPack().pack(clip, artist_chain, base_prompt)[0]
+            _BASIC_PACK_CACHE[cache_key] = artist_pack
+            while len(_BASIC_PACK_CACHE) > _BASIC_PACK_CACHE_LIMIT:
+                _BASIC_PACK_CACHE.pop(next(iter(_BASIC_PACK_CACHE)))
         payload = build_preset_payload(
             preset,
             intensity,
@@ -364,10 +392,13 @@ def _build_runtime_state(enabled, fusion_mode, combine_mode, strength,
         "stabilizer_min_sigma": adv.get("stabilizer_min_sigma"),
         "current_sigma": None,
         "external_cross_attn_patches": external_patches,
+        "_disabled_layers": set(),
+        "_run_last_sigma": None,
         "_ema_cache": {},
         "_ema_last_sigma": None,
         "_static_cache": {},
-        "_static_max_sigma": None,
+        "_static_last_sigma": None,
+        "_ctx_fp_memo": {},
         "_anchor_cache": {},
         "_anchor_base_cache": {},
         "_anchor_cache_key": None,
@@ -610,6 +641,12 @@ class AnimaArtistCrossAttn:
                 "[AnimaCrossAttn] negative artist weights detected; those "
                 "artists subtract their style direction (style subtraction)."
             )
+            if combine_mode == COMBINE_CONCAT:
+                logger.warning(
+                    "[AnimaCrossAttn] combine=concat treats negative weights as "
+                    "sign-flipped K/V tokens, not style subtraction. Delta-space "
+                    "style subtraction only exists in output_avg/lowrank_avg."
+                )
 
         if fusion_mode == FUSION_BASE_PRESERVE and float(strength) < 0.3:
             logger.info(
@@ -751,16 +788,34 @@ class AnimaArtistCrossAttn:
             adv, dm, sigma_range, external_patches,
         )
 
-        if need_sigma_capture:
-            prev = m.model_options.get("model_function_wrapper")
-            if prev is not None and not adv.get("compatibility_mode", False):
-                logger.warning(
-                    "[AnimaCrossAttn] another model_function_wrapper is already "
-                    "installed; this node chains to it. If timing routes or "
-                    "stabilizers stop working, enable compatibility_safe or "
-                    "simplify the other wrapper nodes."
-                )
-            m.set_model_unet_function_wrapper(make_sigma_capture(state, prev))
+        # The sigma-capture wrapper is always installed: it is the single
+        # run-start reset point every configuration relies on (disabled-layer
+        # set, EMA/static caches, warning latches). The chaining warning stays
+        # gated to sigma-dependent features so plain configs chain silently.
+        prev = m.model_options.get("model_function_wrapper")
+        if need_sigma_capture and prev is not None and not adv.get("compatibility_mode", False):
+            logger.warning(
+                "[AnimaCrossAttn] another model_function_wrapper is already "
+                "installed; this node chains to it. If timing routes or "
+                "stabilizers stop working, enable compatibility_safe or "
+                "simplify the other wrapper nodes."
+            )
+        m.set_model_unet_function_wrapper(make_sigma_capture(state, prev))
+
+        # If a previous Anima mixer node already patched some of these blocks
+        # (dual-mixer chain), warn once: object patches replace, so the later
+        # node wins on the overlap.
+        existing_patches = getattr(m, "object_patches", None) or {}
+        overlapped = [
+            i for i in target_blocks
+            if f"diffusion_model.blocks.{i}.cross_attn.forward" in existing_patches
+        ]
+        if overlapped:
+            logger.warning(
+                "[AnimaCrossAttn] another Anima Artist mixer node already patches "
+                "blocks %d-%d on this model; the later node wins on overlapping "
+                "blocks.", min(overlapped), max(overlapped),
+            )
 
         for i in target_blocks:
             ca = dm.blocks[i].cross_attn
@@ -899,6 +954,11 @@ class AnimaArtistProbe:
         ok, num_blocks, _, msg = validate_model(dm)
         if not ok:
             raise ValueError(f"[AnimaArtistProbe] unsupported model: {msg}")
+        if not hasattr(dm, "preprocess_text_embeds"):
+            raise ValueError(
+                "[AnimaArtistProbe] this is not an Anima model "
+                "(missing preprocess_text_embeds)"
+            )
 
         probe_id = uuid.uuid4().hex[:12]
         n = len(raws)
@@ -916,6 +976,9 @@ class AnimaArtistProbe:
         state["probe_labels"] = labels
         state["probe_num_blocks"] = num_blocks
         state["_probe_seen_sigmas"] = set()
+        # Fallback step budget for the degenerate case where the sigma-capture
+        # hook was overridden and current_sigma is never set.
+        state["_probe_forward_count"] = 0
 
         m = model.clone()
         prev = m.model_options.get("model_function_wrapper")
@@ -952,29 +1015,43 @@ class _ProbeCrossAttnWrapper(CrossAttnWrapper):
             stats[self._idx] = layer_stats
         # Measure only the first probe_steps distinct sigmas; afterwards the
         # forward is a plain pass-through (and the seen-set stops growing so
-        # the report's step count stays accurate).
-        seen = st.setdefault("_probe_seen_sigmas", set())
-        cur = st.get("current_sigma")
+        # the report's step count stays accurate). When the sigma is missing
+        # (capture hook overridden), fall back to a raw forward counter so the
+        # budget is still enforced instead of measuring forever.
         budget = int(st.get("probe_steps", 6))
+        cur = st.get("current_sigma")
         if cur is not None:
+            seen = st.setdefault("_probe_seen_sigmas", set())
             cur_key = round(float(cur), 4)
             if cur_key not in seen:
                 if len(seen) >= budget:
                     return base_out
                 seen.add(cur_key)
+        else:
+            count = int(st.get("_probe_forward_count", 0))
+            if count >= budget:
+                return base_out
+            st["_probe_forward_count"] = count + 1
 
-        from .patching import build_artists
+        # Restrict the delta measurement to the cond rows: under CFG the uncond
+        # rows carry the unstyled trajectory and would understate influence.
+        from .patching import build_artists, resolve_mask
+        cou = transformer_options.get("cond_or_uncond") \
+            if isinstance(transformer_options, dict) else None
+        mask = resolve_mask(cou, context.shape[0], False, {})
+        row_mask = torch.tensor(mask, device=base_out.device, dtype=torch.bool)
+
         individuals, _ = build_artists(st, context)
         outs = self._collect_artist_outputs(
             x, context, rope_emb, transformer_options, individuals,
             FUSION_INTERPOLATE,
         )
-        base_norm = float(base_out.detach().to(torch.float32).norm().item())
+        base_sel = base_out.detach().to(torch.float32)[row_mask]
+        base_norm = float(base_sel.norm().item())
         if base_norm <= 1e-8:
             return base_out
         for i, out_i in enumerate(outs):
-            delta = (out_i.detach().to(torch.float32)
-                     - base_out.detach().to(torch.float32))
+            delta = out_i.detach().to(torch.float32)[row_mask] - base_sel
             rel = float(delta.norm().item()) / base_norm
             layer_stats[i][0] += rel
             layer_stats[i][1] += 1
@@ -1045,10 +1122,12 @@ class AnimaArtistProbeReport:
         n = len(labels)
         # scores[artist][layer] = mean relative delta
         scores = [[0.0] * num_blocks for _ in range(n)]
+        sample_counts = [0] * n
         for layer_idx, layer_stats in stats.items():
             for i, (total, count) in enumerate(layer_stats):
                 if i < n and 0 <= layer_idx < num_blocks and count > 0:
                     scores[i][layer_idx] = total / count
+                    sample_counts[i] = max(sample_counts[i], count)
 
         lines = [
             "Anima Artist Probe Report",
@@ -1065,7 +1144,10 @@ class AnimaArtistProbeReport:
             row = scores[i]
             peak = max(row) if row else 0.0
             lines.append("")
-            lines.append(f"artist {i + 1}: {label} (peak {peak:.3f})")
+            lines.append(
+                f"artist {i + 1}: {label} "
+                f"(peak {peak:.3f}, {sample_counts[i]} samples)"
+            )
             # Compact bar chart, 8 layers per line.
             for start in range(0, num_blocks, 8):
                 seg = row[start:start + 8]

@@ -5,38 +5,9 @@ import logging
 import torch
 
 from .constants import ANCHOR_SEEDS_MAX, ANCHOR_SEEDS_POOL
+from .patching import _context_fingerprint, _in_stabilizer_window, reset_run_state
 
 logger = logging.getLogger(__name__)
-
-
-def _in_stabilizer_window(state):
-    threshold = state.get("stabilizer_min_sigma")
-    if threshold is None:
-        return True
-    cur = state.get("current_sigma")
-    if cur is None:
-        return True
-    return float(cur) >= float(threshold)
-
-
-def _context_fingerprint(context):
-    """Content-based fingerprint for the base context tensor.
-
-    ``id()`` is unsafe here: a freed tensor's id can be reused by a new
-    allocation, silently re-hitting a stale anchor cache. Shape + dtype +
-    a cheap value checksum keys the cache by content instead.
-    """
-    if context is None or not torch.is_tensor(context):
-        return None
-    try:
-        sample = context.detach()
-        flat = sample.reshape(-1)
-        # Sample up to 1024 evenly spaced elements; cheap and stable.
-        step = max(1, flat.numel() // 1024)
-        digest = flat[::step].to(torch.float32).sum().item()
-        return (tuple(context.shape), str(context.dtype), round(digest, 3))
-    except Exception:
-        return (tuple(context.shape), str(context.dtype), None)
 
 
 def _call_diffusion_forward(dm, x, timestep, context, transformer_options):
@@ -72,6 +43,17 @@ def make_sigma_capture(state, prev_wrapper):
                 state["current_sigma"] = cur_sigma
             except Exception:
                 pass
+
+        # Unified run-start reset: a sigma jump upward (or the very first
+        # forward) means a new sampling pass, so clear the per-run caches and
+        # one-shot warnings. This is the single reset point every configuration
+        # relies on, which is why the capture wrapper is always installed.
+        prev_run_sigma = state.get("_run_last_sigma")
+        if prev_run_sigma is None or (
+            cur_sigma is not None and cur_sigma > prev_run_sigma + 1e-3
+        ):
+            reset_run_state(state)
+        state["_run_last_sigma"] = cur_sigma
 
         # The anchor cache survives sigma jumps on purpose: the same prompt
         # across seeds shares a fingerprint and hits the cache. Only a
@@ -124,15 +106,21 @@ def maybe_run_anchor(state, user_x, user_timestep, c_dict, apply_model=None):
         return
     original_context = base_context
 
-    # Under CFG, use the cond row as the anchor conditioning.
+    # Under CFG, use the cond row as the anchor conditioning. Pick the cond
+    # row index once so context and token ids/weights stay paired: with
+    # uncond-first ordering (cou=[1, 0]) a fixed row-0 slice would feed the
+    # cond embedding with uncond ids. When this forward carries no cond row
+    # (cou present and 0 not in it), defer to a later forward that has one.
     transformer_options = c_dict.get("transformer_options", {}) or {}
+    cou = transformer_options.get("cond_or_uncond")
+    cond_idx = 0
+    if cou is not None:
+        if 0 not in cou:
+            return
+        cond_idx = cou.index(0)
     if base_context.dim() >= 2 and base_context.shape[0] > 1:
-        cou = transformer_options.get("cond_or_uncond")
-        if cou is not None and 0 in cou:
-            cond_idx = cou.index(0)
-            base_context = base_context[cond_idx:cond_idx + 1]
-        else:
-            base_context = base_context[:1]
+        row = cond_idx if cond_idx < base_context.shape[0] else 0
+        base_context = base_context[row:row + 1]
 
     cache_key = state.get("_anchor_cache_key")
     try:
@@ -172,7 +160,10 @@ def maybe_run_anchor(state, user_x, user_timestep, c_dict, apply_model=None):
             if v.shape[0] == 1:
                 v = v.expand(bsz, *v.shape[1:])
             else:
-                v = v[:1].expand(bsz, *v.shape[1:])
+                # Reduce to the cond row (same index used for the context) so
+                # ids/weights stay paired with the anchor conditioning.
+                row = cond_idx if cond_idx < v.shape[0] else 0
+                v = v[row:row + 1].expand(bsz, *v.shape[1:])
         anchor_kwargs[key] = v.contiguous()
 
     # Isolate transformer_options: no cond_or_uncond / patches leak through.
@@ -261,3 +252,15 @@ def maybe_run_anchor(state, user_x, user_timestep, c_dict, apply_model=None):
                 len(state["_anchor_cache"]),
             )
             state["_warned_anchor_ok"] = True
+    elif not state.get("_anchor_failed", False):
+        # No exception, but our wrappers captured nothing — a later cross-attn
+        # patch likely overrode ours. Disable anchor_q for this run so the next
+        # steps do not each trigger a full (fruitless) pre-run.
+        state["_anchor_failed"] = True
+        if not state.get("_warned_anchor_empty", False):
+            logger.warning(
+                "[AnimaCrossAttn] anchor pre-run captured no hidden states; the "
+                "cross-attn wrappers may have been overridden by a later patch. "
+                "anchor_q is disabled for this run."
+            )
+            state["_warned_anchor_empty"] = True

@@ -33,9 +33,38 @@ from .math_utils import (
     timing_fade_factor,
 )
 from .parsing import normalize_weights
-from .patching import broadcast_batch, build_artists, in_sigma_range, resolve_mask
+from .patching import (
+    _forward_fingerprint,
+    _in_stabilizer_window,
+    broadcast_batch,
+    build_artists,
+    in_sigma_range,
+    resolve_mask,
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _should_reraise(e):
+    """Interrupts and OOM must propagate — never silently disable a layer.
+
+    An out-of-memory error or a user interrupt is not an injection bug; the
+    layer fallback would swallow it and mask the real problem.
+    """
+    for name in ("OutOfMemoryError",):
+        cuda_oom = getattr(getattr(torch, "cuda", None), name, None)
+        if cuda_oom is not None and isinstance(e, cuda_oom):
+            return True
+        torch_oom = getattr(torch, name, None)
+        if torch_oom is not None and isinstance(e, torch_oom):
+            return True
+    try:
+        from comfy.model_management import InterruptProcessingException
+        if isinstance(e, InterruptProcessingException):
+            return True
+    except ImportError:
+        pass
+    return False
 
 
 def _combine_concat(individuals, weights):
@@ -120,14 +149,11 @@ def _static_capture_values_to_cache(mode, outs, base_out):
     return outs
 
 
-def _in_stabilizer_window(state):
-    threshold = state.get("stabilizer_min_sigma")
-    if threshold is None:
-        return True
-    cur = state.get("current_sigma")
-    if cur is None:
-        return True
-    return float(cur) >= float(threshold)
+def _row_mask_like(mask, ref):
+    """Boolean per-row mask shaped to broadcast against ``ref`` (B, 1, 1, ...)."""
+    return torch.tensor(mask, device=ref.device, dtype=torch.bool).view(
+        len(mask), *([1] * (ref.dim() - 1))
+    )
 
 
 class CrossAttnWrapper(nn.Module):
@@ -136,7 +162,22 @@ class CrossAttnWrapper(nn.Module):
         self.original = original
         self._st = shared_state
         self._idx = layer_idx
-        self._disabled = False
+
+    def _warn_no_sigma(self):
+        """One-shot warning when the stabilizers cannot see the sampling sigma.
+
+        Another model wrapper may have replaced our sigma-capture hook; without
+        the sigma we cannot tell run boundaries, so EMA/static capture would
+        accumulate garbage. Skip them for the run instead.
+        """
+        st = self._st
+        if not st.get("_warned_no_sigma", False):
+            logger.warning(
+                "[AnimaCrossAttn] cannot see the sampling sigma; EMA/static "
+                "capture is disabled for this run (another model wrapper may "
+                "have replaced the sigma-capture hook)."
+            )
+            st["_warned_no_sigma"] = True
 
     # ------------------------------------------------------------------ EMA
 
@@ -151,26 +192,36 @@ class CrossAttnWrapper(nn.Module):
             st["_ema_cache"] = {}
         st["_ema_last_sigma"] = cur
 
-    def _apply_ema(self, artist_total, fusion_mode):
+    def _apply_ema(self, artist_total, fusion_mode, fp=None):
         """Cross-step EMA smoothing (fusion in {interpolate, base_preserve}).
 
         concat_with_base never produces an artist_total, and static capture
-        already freezes artist outputs, so EMA is skipped in both cases.
+        already freezes artist outputs, so EMA is skipped in both cases. The
+        cache is keyed by (layer, forward fingerprint) so several forwards at
+        one sigma (multi-cond / VRAM-split batches) do not blend together, and
+        entries honor low_vram_cache offloading.
         """
-        if self._st.get("artist_static_capture", False):
+        st = self._st
+        if st.get("artist_static_capture", False):
             return artist_total
-        if not _in_stabilizer_window(self._st):
-            return artist_total
-        ema_alpha = float(self._st.get("artist_ema_alpha", 0.0))
+        ema_alpha = float(st.get("artist_ema_alpha", 0.0))
         ema_compatible = fusion_mode in (FUSION_INTERPOLATE, FUSION_BASE_PRESERVE)
         if ema_alpha <= 0.0 or not ema_compatible:
             return artist_total
+        if st.get("current_sigma") is None:
+            self._warn_no_sigma()
+            return artist_total
+        if not _in_stabilizer_window(st):
+            return artist_total
         self._maybe_reset_ema()
-        cache = self._st.setdefault("_ema_cache", {})
-        prev = cache.get(self._idx)
+        low_vram = bool(st.get("low_vram_cache", False))
+        cache = st.setdefault("_ema_cache", {})
+        key = (self._idx, fp)
+        prev = cache.get(key)
         if prev is not None and prev.shape == artist_total.shape:
+            prev = _cache_load(prev, artist_total)
             artist_total = ema_alpha * prev + (1.0 - ema_alpha) * artist_total
-        cache[self._idx] = artist_total.detach()
+        cache[key] = _cache_store(artist_total, low_vram)
         return artist_total
 
     # -------------------------------------------------------- static capture
@@ -178,32 +229,44 @@ class CrossAttnWrapper(nn.Module):
     def _maybe_reset_static(self):
         """Reset the static cache when a new sampling run starts.
 
-        Within one run sigma decreases monotonically, so this never fires.
-        Across runs the first step jumps sigma back up -> reset. CFG double
-        forwards repeat the same sigma -> no reset.
+        Tracks the last sigma seen every call (like the EMA reset). Within a
+        run sigma only decreases, so this never fires; a re-queue with the same
+        schedule jumps sigma back up on the first step and clears the frozen
+        artist outputs, so they cannot leak across generations. The previous
+        max-sigma tracking never reset when a re-queue repeated the schedule
+        exactly (cur == prev_max).
         """
         st = self._st
         cur = st.get("current_sigma")
         if cur is None:
             return
-        prev_max = st.get("_static_max_sigma")
-        if prev_max is None or cur > prev_max + 1e-3:
+        prev = st.get("_static_last_sigma")
+        if prev is None or cur > prev + 1e-3:
             st["_static_cache"] = {}
-            st["_static_max_sigma"] = cur
+        st["_static_last_sigma"] = cur
 
     def _get_artist_outputs_with_cache(self, x, context, rope_emb, t_opts,
-                                       individuals, fusion_mode, base_out=None):
+                                       individuals, fusion_mode, base_out=None,
+                                       extra_fp=None, fp=None):
         """H' temporal averaging: accumulate the first K steps, then freeze.
 
-        Accumulation runs in fp32; returned tensors keep the model dtype.
-        Cache fingerprint = (x.shape, n); resolution or artist-count changes
-        invalidate the entry. A sigma jump (new run) resets everything.
-        Repeated calls at the same sigma (CFG double forward) reuse the
-        current average without re-accumulating.
+        Accumulation runs in fp32; returned tensors keep the model dtype. The
+        static cache is keyed by (layer, forward fingerprint ``fp``) so several
+        forwards at one sigma keep independent entries. The per-entry
+        fingerprint (x.shape, n, mode, ``extra_fp``) invalidates on a
+        resolution / artist-count / mode change; ``extra_fp`` also folds in the
+        combined path's weight*fade so a mid-fade freeze cannot lock a stale
+        weight. A sigma jump (new run) resets everything; repeated calls at the
+        same sigma (CFG double forward) reuse the current average.
         """
         st = self._st
         low_vram = bool(st.get("low_vram_cache", False))
         if not st.get("artist_static_capture", False):
+            return self._collect_artist_outputs(
+                x, context, rope_emb, t_opts, individuals, fusion_mode
+            )
+        if st.get("current_sigma") is None:
+            self._warn_no_sigma()
             return self._collect_artist_outputs(
                 x, context, rope_emb, t_opts, individuals, fusion_mode
             )
@@ -229,22 +292,23 @@ class CrossAttnWrapper(nn.Module):
         self._maybe_reset_static()
         cache = st.setdefault("_static_cache", {})
         n = len(individuals)
-        fp = (tuple(x.shape), n, mode)
+        entry_fp = (tuple(x.shape), n, mode, extra_fp)
+        cache_key = (self._idx, fp)
 
         cur_sigma = st.get("current_sigma")
         sigma_key = round(float(cur_sigma), 4) if cur_sigma is not None else None
 
-        entry = cache.get(self._idx)
-        if entry is None or entry.get("_fp") != fp:
+        entry = cache.get(cache_key)
+        if entry is None or entry.get("_fp") != entry_fp:
             entry = {
-                "_fp": fp,
+                "_fp": entry_fp,
                 "seen_sigmas": set(),
                 "accumulator": None,
                 "count": 0,
                 "frozen": False,
                 "frozen_outputs": None,
             }
-            cache[self._idx] = entry
+            cache[cache_key] = entry
 
         if entry["frozen"]:
             frozen = [_cache_load(o, context) for o in entry["frozen_outputs"]]
@@ -302,25 +366,24 @@ class CrossAttnWrapper(nn.Module):
     # ----------------------------------------------------------------- fusion
 
     def _apply_fusion(self, base_out, artist_total, mask, fusion_mode, strength):
-        """Single fusion exit for interpolate and base_preserve.
+        """Single fusion exit for the delta-space paths.
 
-        concat_with_base never reaches this point (handled in
-        _fwd_with_combined).
+        Reached with fusion_mode in {interpolate, base_preserve}. The combine=
+        concat single-forward path handles concat_with_base itself in
+        _fwd_with_combined and never gets here; but combine=output_avg /
+        lowrank_avg with fusion=concat_with_base DO reach this, where
+        concat_with_base is not base_preserve and so falls through to the
+        interpolate lerp below.
         """
+        row_mask = _row_mask_like(mask, base_out)
         if fusion_mode == FUSION_BASE_PRESERVE:
             delta = artist_total - base_out
             delta_perp = project_perpendicular(delta, base_out)
-            out = base_out.clone()
-            for i, hit in enumerate(mask):
-                if hit:
-                    out[i] = base_out[i] + strength * delta_perp[i]
-            return out
+            blended = base_out + strength * delta_perp
+            return torch.where(row_mask, blended, base_out)
 
-        out = base_out.clone()
-        for i, hit in enumerate(mask):
-            if hit:
-                out[i] = base_out[i] * (1.0 - strength) + artist_total[i] * strength
-        return out
+        blended = base_out * (1.0 - strength) + artist_total * strength
+        return torch.where(row_mask, blended, base_out)
 
     def _match_base_norm(self, artist_total, base_out, mask, scale_floor=0.5):
         """Rescale the mixed artist output to the base output's RMS energy.
@@ -343,9 +406,8 @@ class CrossAttnWrapper(nn.Module):
         artist_rms = artist_total.detach().to(torch.float32).pow(2).mean(
             dim=dims, keepdim=True).sqrt()
         scale = (base_rms / artist_rms.clamp(min=1e-6)).clamp(scale_floor, 2.0)
-        for i, hit in enumerate(mask):
-            if not hit:
-                scale[i] = 1.0
+        row_mask = _row_mask_like(mask, scale)
+        scale = torch.where(row_mask, scale, torch.ones_like(scale))
         return artist_total * scale.to(artist_total.dtype)
 
     def _get_anchor_base_norm_ref(self, base_out):
@@ -418,6 +480,7 @@ class CrossAttnWrapper(nn.Module):
             total_strength = total_strength + s
         target_strength = total_strength / float(len(active_strengths))
 
+        row_mask = _row_mask_like(mask, base_out)
         balanced = []
         for out, delta, strength, w in zip(
             artist_outs, deltas, strengths, pos,
@@ -430,9 +493,7 @@ class CrossAttnWrapper(nn.Module):
             )
             if alpha < 1.0:
                 scale = 1.0 + alpha * (scale - 1.0)
-            for i, hit in enumerate(mask):
-                if not hit:
-                    scale[i] = 1.0
+            scale = torch.where(row_mask, scale, torch.ones_like(scale))
             adjusted = base_out + delta.to(out.dtype) * scale.to(out.dtype)
             balanced.append(adjusted)
         return balanced
@@ -477,9 +538,8 @@ class CrossAttnWrapper(nn.Module):
             torch.ones_like(delta_rms),
             max_delta_rms / delta_rms.clamp(min=1e-6),
         )
-        for i, hit in enumerate(mask):
-            if not hit:
-                scale[i] = 1.0
+        row_mask = _row_mask_like(mask, scale)
+        scale = torch.where(row_mask, scale, torch.ones_like(scale))
         capped = base_out.to(torch.float32) + delta * scale
         return capped.to(artist_total.dtype)
 
@@ -509,7 +569,11 @@ class CrossAttnWrapper(nn.Module):
             return self.original(x, context, rope_emb=rope_emb,
                                  transformer_options=transformer_options)
 
-        if self._disabled:
+        # A layer that failed is disabled for the rest of the run only. The set
+        # lives in the shared run state (not on the wrapper) so the run-start
+        # reset clears it — ComfyUI caches the patched model clone, so a
+        # per-wrapper flag would stay stuck across queue runs.
+        if self._idx in st.get("_disabled_layers", ()):
             return self.original(x, context, rope_emb=rope_emb,
                                  transformer_options=transformer_options)
 
@@ -520,11 +584,14 @@ class CrossAttnWrapper(nn.Module):
         try:
             return self._dispatch(x, context, rope_emb, transformer_options)
         except Exception as e:
+            # Interrupts and OOM are not injection bugs; let them propagate.
+            if _should_reraise(e):
+                raise
             logger.exception(
                 "[AnimaCrossAttn] L%d injection failed; this layer falls back "
                 "to the original cross-attention: %s", self._idx, e,
             )
-            self._disabled = True
+            st.setdefault("_disabled_layers", set()).add(self._idx)
             return self.original(x, context, rope_emb=rope_emb,
                                  transformer_options=transformer_options)
 
@@ -574,27 +641,35 @@ class CrossAttnWrapper(nn.Module):
             return self.original(x, context, rope_emb=rope_emb,
                                  transformer_options=transformer_options)
 
+        # Per-forward fingerprint: several forwards can share one sigma (multi
+        # positive conds, regional prompts, VRAM-split batches); keying the
+        # EMA/static caches by it keeps them from cross-contaminating.
+        fp = _forward_fingerprint(st, context)
+
         # lowrank_avg is meaningless for a single artist (no multi-artist
         # directions to project); it degrades to output_avg below.
         if combine_mode == COMBINE_LOWRANK_AVG and len(individuals) >= 2:
             return self._fwd_lowrank_avg(
                 x, context, rope_emb, transformer_options,
-                individuals, weights, fades, mask, fusion_mode, strength,
+                individuals, weights, fades, mask, fusion_mode, strength, fp=fp,
             )
 
         if combine_mode in (COMBINE_OUTPUT_AVG, COMBINE_LOWRANK_AVG):
             return self._fwd_output_avg(
                 x, context, rope_emb, transformer_options,
-                individuals, weights, fades, mask, fusion_mode, strength,
+                individuals, weights, fades, mask, fusion_mode, strength, fp=fp,
             )
 
         # concat never normalizes, so the fade multiplies the raw weight.
         combined = _combine_concat(
             individuals, [w * f for w, f in zip(weights, fades)],
         )
+        # extra_fp folds the effective weight*fade into the static fingerprint
+        # so a mid-fade freeze on the combined path cannot lock a stale weight.
+        combined_fp = tuple(round(w * f, 6) for w, f in zip(weights, fades))
         return self._fwd_with_combined(
             x, context, rope_emb, transformer_options,
-            combined, mask, fusion_mode, strength,
+            combined, mask, fusion_mode, strength, fp=fp, extra_fp=combined_fp,
         )
 
     def _effective_weights(self, weights, fades):
@@ -627,7 +702,8 @@ class CrossAttnWrapper(nn.Module):
         return ws, base_comp
 
     def _fwd_output_avg(self, x, context, rope_emb, t_opts,
-                        individuals, weights, fades, mask, fusion_mode, strength):
+                        individuals, weights, fades, mask, fusion_mode, strength,
+                        fp=None):
         bsz = context.shape[0]
 
         ws, base_comp = self._effective_weights(weights, fades)
@@ -684,7 +760,8 @@ class CrossAttnWrapper(nn.Module):
         artist_total = None
         if force_collect or per_artist_lock or balance_deltas:
             outs = self._get_artist_outputs_with_cache(
-                x, context, rope_emb, t_opts, individuals, fusion_mode, base_out=base_out
+                x, context, rope_emb, t_opts, individuals, fusion_mode,
+                base_out=base_out, fp=fp,
             )
             if per_artist_lock:
                 outs = [
@@ -733,7 +810,7 @@ class CrossAttnWrapper(nn.Module):
             # timing fades and explicit weights smaller/larger than 1.0.
             artist_total = artist_total + base_comp * base_out
 
-        artist_total = self._apply_ema(artist_total, fusion_mode)
+        artist_total = self._apply_ema(artist_total, fusion_mode, fp=fp)
 
         if mixed_lock:
             artist_total = self._match_base_norm(artist_total, base_out, mask)
@@ -897,7 +974,8 @@ class CrossAttnWrapper(nn.Module):
     # ----------------------------------------------------------- lowrank path
 
     def _fwd_lowrank_avg(self, x, context, rope_emb, t_opts,
-                          individuals, weights, fades, mask, fusion_mode, strength):
+                          individuals, weights, fades, mask, fusion_mode, strength,
+                          fp=None):
         """LoRA-style low-rank injection.
 
         delta_i = A_i - A_base
@@ -938,7 +1016,8 @@ class CrossAttnWrapper(nn.Module):
             and n >= 2
         )
         artist_outs = self._get_artist_outputs_with_cache(
-            x, context, rope_emb, t_opts, individuals, fusion_mode, base_out=base_out
+            x, context, rope_emb, t_opts, individuals, fusion_mode,
+            base_out=base_out, fp=fp,
         )
         if per_artist_lock:
             artist_outs = [
@@ -977,7 +1056,7 @@ class CrossAttnWrapper(nn.Module):
 
         artist_total = base_out + delta_avg
 
-        artist_total = self._apply_ema(artist_total, fusion_mode)
+        artist_total = self._apply_ema(artist_total, fusion_mode, fp=fp)
         if mixed_lock:
             artist_total = self._match_base_norm(artist_total, base_out, mask)
         artist_total = self._cap_mixed_delta(
@@ -991,7 +1070,8 @@ class CrossAttnWrapper(nn.Module):
     # ---------------------------------------------------------- combined path
 
     def _fwd_with_combined(self, x, context, rope_emb, t_opts,
-                           combined, mask, fusion_mode, strength):
+                           combined, mask, fusion_mode, strength,
+                           fp=None, extra_fp=None):
         bsz = context.shape[0]
         artist_b = broadcast_batch(combined, bsz).to(
             device=context.device, dtype=context.dtype)
@@ -1008,12 +1088,14 @@ class CrossAttnWrapper(nn.Module):
             base_out = self.original(x, context, rope_emb=rope_emb, transformer_options=t_opts)
             # Reuse the K-step averaging machinery with a single pseudo
             # artist, so combined paths get the same temporal smoothing as
-            # output_avg instead of a first-step-only snapshot.
+            # output_avg instead of a first-step-only snapshot. extra_fp carries
+            # the weight*fade so a freeze cannot lock a stale mid-fade weight.
             outs = self._get_artist_outputs_with_cache(
-                x, context, rope_emb, t_opts, [artist_b], fusion_mode, base_out=base_out
+                x, context, rope_emb, t_opts, [artist_b], fusion_mode,
+                base_out=base_out, extra_fp=extra_fp, fp=fp,
             )
             artist_out = outs[0]
-            artist_out = self._apply_ema(artist_out, fusion_mode)
+            artist_out = self._apply_ema(artist_out, fusion_mode, fp=fp)
             if mixed_lock:
                 artist_out = self._match_base_norm(artist_out, base_out, mask)
             artist_out = self._cap_mixed_delta(
@@ -1024,12 +1106,15 @@ class CrossAttnWrapper(nn.Module):
                 return artist_out
             return self._apply_fusion(base_out, artist_out, mask, fusion_mode, strength)
 
-        # FUSION_CONCAT_WITH_BASE
-        artist_len = artist_b.shape[1]
-        extension = torch.zeros(bsz, artist_len, context.shape[-1],
-                                device=context.device, dtype=context.dtype)
-        for i, hit in enumerate(mask):
-            if hit:
-                extension[i] = artist_b[i]
-        merged = torch.cat([context, extension], dim=1)
-        return self.original(x, merged, rope_emb=rope_emb, transformer_options=t_opts)
+        # FUSION_CONCAT_WITH_BASE: every masked-in row gets the artist tokens
+        # appended to its K/V. Padding uncond rows with zero tokens (the old
+        # behavior) still fed them softmax weight and diluted the CFG uncond
+        # output. Instead, when only some rows are masked in, run the base
+        # forward too and select per row so uncond stays exactly the base.
+        merged = torch.cat([context, artist_b], dim=1)
+        if all(mask):
+            return self.original(x, merged, rope_emb=rope_emb, transformer_options=t_opts)
+        merged_out = self.original(x, merged, rope_emb=rope_emb, transformer_options=t_opts)
+        base_out = self.original(x, context, rope_emb=rope_emb, transformer_options=t_opts)
+        row_mask = _row_mask_like(mask, merged_out)
+        return torch.where(row_mask, merged_out, base_out)

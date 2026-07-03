@@ -7,6 +7,97 @@ import torch
 logger = logging.getLogger(__name__)
 
 
+def _in_stabilizer_window(state):
+    """True while the current sigma is at or above the stabilizer threshold.
+
+    Shared by the wrapper (EMA/static/anchor gating) and the anchor pre-run.
+    A missing threshold or sigma means "always active".
+    """
+    threshold = state.get("stabilizer_min_sigma")
+    if threshold is None:
+        return True
+    cur = state.get("current_sigma")
+    if cur is None:
+        return True
+    return float(cur) >= float(threshold)
+
+
+def _context_fingerprint(context):
+    """Content-based fingerprint for a context tensor.
+
+    ``id()`` is unsafe here: a freed tensor's id can be reused by a new
+    allocation, silently re-hitting a stale cache. Shape + dtype + a cheap
+    value checksum keys caches by content instead.
+    """
+    if context is None or not torch.is_tensor(context):
+        return None
+    try:
+        sample = context.detach()
+        flat = sample.reshape(-1)
+        # Sample up to 1024 evenly spaced elements; cheap and stable.
+        step = max(1, flat.numel() // 1024)
+        digest = flat[::step].to(torch.float32).sum().item()
+        return (tuple(context.shape), str(context.dtype), round(digest, 3))
+    except Exception:
+        return (tuple(context.shape), str(context.dtype), None)
+
+
+def _forward_fingerprint(st, context):
+    """Per-forward fingerprint so several forwards at the same sigma (multiple
+    positive conds, regional prompts, VRAM-split batches) keep independent
+    stabilizer caches instead of cross-contaminating.
+
+    Memoized by ``id(context)`` within a run to avoid recomputing the digest
+    for every layer of one forward; the memo is cleared at run start.
+    """
+    if context is None:
+        return None
+    memo = st.setdefault("_ctx_fp_memo", {})
+    key = id(context)
+    cached = memo.get(key)
+    if cached is not None:
+        return cached
+    fp = _context_fingerprint(context)
+    memo[key] = fp
+    return fp
+
+
+def reset_run_state(state):
+    """Clear per-run caches and one-shot warnings at the start of a run.
+
+    Called from the sigma-capture wrapper when sigma jumps upward (a new
+    sampling pass). The content-keyed anchor caches
+    (``_anchor_cache``/``_anchor_base_cache``/``_anchor_cache_key``) survive
+    on purpose: the same prompt across seeds shares a fingerprint and reuses
+    them. Everything that accumulates within a single pass is reset here.
+
+    The probe accumulators are cleared in place so the probe registry's
+    reference sees the reset instead of pointing at an orphaned dict.
+
+    Known limitation: restart-style samplers jump sigma upward mid-run, so
+    each restart segment resets too (stabilizers re-accumulate and the probe
+    reports only the final segment). That matches the pre-existing EMA reset
+    semantics and is preferable to leaking state across queue runs.
+    """
+    state["_disabled_layers"] = set()
+    state["_disable_batched"] = False
+    state["_warned_batched"] = False
+    state["_warned"] = False
+    state["_warned_svd"] = False
+    state["_ema_cache"] = {}
+    state["_static_cache"] = {}
+    state["_ctx_fp_memo"] = {}
+    state["_anchor_failed"] = False
+    probe_stats = state.get("probe_stats")
+    if isinstance(probe_stats, dict):
+        probe_stats.clear()
+    probe_seen = state.get("_probe_seen_sigmas")
+    if isinstance(probe_seen, set):
+        probe_seen.clear()
+    if "_probe_forward_count" in state:
+        state["_probe_forward_count"] = 0
+
+
 def extract_conditioning(conditioning):
     """Pull (raw_embedding, t5xxl_ids, t5xxl_weights) out of a CONDITIONING."""
     if conditioning is None:
@@ -73,21 +164,6 @@ def validate_model(diffusion_model):
     if not hasattr(ca, "context_dim"):
         return False, 0, 0, "cross_attn has no context_dim"
     return True, len(blocks), int(ca.context_dim), "ok"
-
-
-def cleanup_residual_wrappers(dm):
-    if not hasattr(dm, "blocks"):
-        return 0
-    cleaned = 0
-    for i in range(len(dm.blocks)):
-        blk = dm.blocks[i]
-        if not hasattr(blk, "cross_attn"):
-            continue
-        original = unwrap_cross_attn(blk.cross_attn)
-        if blk.cross_attn is not original:
-            blk.cross_attn = original
-            cleaned += 1
-    return cleaned
 
 
 def describe_external_cross_attn_patches(dm, target_blocks):
