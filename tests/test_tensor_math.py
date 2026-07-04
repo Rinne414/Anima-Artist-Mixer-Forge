@@ -245,6 +245,74 @@ class WrapperHelpersTest(unittest.TestCase):
         self.assertTrue(torch.allclose(out[0, 0], torch.full((4,), 0.5)))
         self.assertTrue(torch.allclose(out[0, 2], torch.full((4,), 2.0)))
 
+    def test_combine_concat_trims_zero_padding_with_real_lens(self):
+        # Anima's preprocess_text_embeds zero-pads every artist conditioning
+        # to 512 tokens; concat must slice each artist back to its real
+        # token count or the padding rows become K/V attention sinks.
+        a = torch.ones(1, 4, 2)
+        b = torch.full((1, 4, 2), 2.0)
+        a[:, 2:] = 0.0
+        b[:, 3:] = 0.0
+        out = _combine_concat([a, b], [1.0, 0.5], real_lens=[2, 3])
+        self.assertEqual(tuple(out.shape), (1, 5, 2))
+        self.assertTrue(torch.allclose(out[0, :2], torch.ones(2, 2)))
+        self.assertTrue(torch.allclose(out[0, 2:], torch.ones(3, 2)))
+
+    def test_combine_concat_out_of_range_real_lens_keep_full_rows(self):
+        a = torch.ones(1, 3, 2)
+        out = _combine_concat([a, a], [1.0, 1.0], real_lens=[0, 99])
+        self.assertEqual(tuple(out.shape), (1, 6, 2))
+
+    def test_dispatch_concat_trims_padding_before_kv_append(self):
+        # One artist token of value 1.0 padded out to 4 rows. With slicing
+        # the merged K/V mean is (3*3 + 1)/4; with the padding left in it
+        # would be diluted to (3*3 + 1)/7.
+        artist = torch.zeros(1, 4, 1)
+        artist[:, 0] = 1.0
+        state = {
+            "individuals": [artist],
+            "real_lens": [1],
+            "combine_mode": "concat",
+            "fusion_mode": "concat_with_base",
+            "strength": 1.0,
+            "user_weights": [1.0],
+            "apply_to_uncond": False,
+        }
+        w = CrossAttnWrapper(_KVMeanAttn(), state, 0)
+        x = torch.zeros(1, 2, 1)
+        base_ctx = torch.full((1, 3, 1), 3.0)
+
+        out = w._dispatch(x, base_ctx, None, {"cond_or_uncond": [0]})
+
+        self.assertTrue(torch.allclose(out, torch.full_like(out, 2.5)))
+
+    def test_dispatch_concat_route_filter_keeps_real_lens_aligned(self):
+        # Artist 0 is routed away from this layer; artist 1 (real length 2)
+        # survives. A misaligned zip would slice artist 1 with artist 0's
+        # real length (1 token, mean 3.5) instead of its own (2 tokens, 3.8).
+        routed_away = torch.full((1, 4, 1), 7.0)
+        survivor = torch.zeros(1, 4, 1)
+        survivor[:, :2] = 5.0
+        state = {
+            "individuals": [routed_away, survivor],
+            "real_lens": [1, 2],
+            "combine_mode": "concat",
+            "fusion_mode": "concat_with_base",
+            "strength": 1.0,
+            "user_weights": [1.0, 1.0],
+            "apply_to_uncond": False,
+            "has_artist_layer_routes": True,
+            "artist_layer_routes": [(5,), None],
+            "artist_timing_routes": [None, None],
+        }
+        w = CrossAttnWrapper(_KVMeanAttn(), state, 0)
+        x = torch.zeros(1, 2, 1)
+        base_ctx = torch.full((1, 3, 1), 3.0)
+
+        out = w._dispatch(x, base_ctx, None, {"cond_or_uncond": [0]})
+
+        self.assertTrue(torch.allclose(out, torch.full_like(out, 3.8)))
+
     def test_effective_weights_normalize_then_fade(self):
         # Normalization must run BEFORE the fade multiplies in, otherwise a
         # single fading artist would renormalize back to 1.0 (fade no-op).

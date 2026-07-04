@@ -64,8 +64,21 @@ def _should_reraise(e):
     return False
 
 
-def _combine_concat(individuals, weights):
-    parts = [a * float(w) for a, w in zip(individuals, weights)]
+def _combine_concat(individuals, weights, real_lens=None):
+    """Weighted token concat with the encoder's zero padding sliced off.
+
+    Anima's ``preprocess_text_embeds`` zero-pads every conditioning to 512
+    tokens. Zero rows are not inert in attention (a zero key still gets
+    ``exp(0)`` softmax mass), so concatenating full padded tensors appends
+    hundreds of dilution tokens per artist to the K/V. ``real_lens`` carries
+    each artist's true token count; out-of-range values keep the full tensor.
+    """
+    parts = []
+    for i, (a, w) in enumerate(zip(individuals, weights)):
+        rl = real_lens[i] if real_lens is not None and i < len(real_lens) else None
+        if rl is not None and 0 < rl < a.shape[1]:
+            a = a[:, :rl]
+        parts.append(a * float(w))
     return torch.cat(parts, dim=1)
 
 
@@ -146,7 +159,9 @@ class CrossAttnWrapper(StabilizerMixin, nn.Module):
 
     def _dispatch(self, x, context, rope_emb, transformer_options):
         st = self._st
-        individuals, _ = build_artists(st, context)
+        individuals, real_lens = build_artists(st, context)
+        if not isinstance(real_lens, (list, tuple)) or len(real_lens) != len(individuals):
+            real_lens = [None] * len(individuals)
         combine_mode = st["combine_mode"]
         fusion_mode = st["fusion_mode"]
         strength = float(st["strength"])
@@ -163,24 +178,25 @@ class CrossAttnWrapper(StabilizerMixin, nn.Module):
             filtered = []
             keep_zero_fades = combine_mode in (COMBINE_OUTPUT_AVG, COMBINE_LOWRANK_AVG)
             has_positive_fade = False
-            for artist, weight, route, timing in zip(
-                individuals, weights, routes, timings,
+            for artist, weight, route, timing, rlen in zip(
+                individuals, weights, routes, timings, real_lens,
             ):
                 if route is not None and self._idx not in route:
                     continue
                 fade = timing_fade_factor(timing, cur_sigma)
                 if fade <= 0.0:
                     if keep_zero_fades:
-                        filtered.append((artist, weight, 0.0))
+                        filtered.append((artist, weight, 0.0, rlen))
                     continue
                 has_positive_fade = True
-                filtered.append((artist, weight, fade))
+                filtered.append((artist, weight, fade, rlen))
             if not filtered or not has_positive_fade:
                 return self.original(x, context, rope_emb=rope_emb,
                                      transformer_options=transformer_options)
             individuals = [item[0] for item in filtered]
             weights = [item[1] for item in filtered]
             fades = [item[2] for item in filtered]
+            real_lens = [item[3] for item in filtered]
 
         cou = transformer_options.get("cond_or_uncond") if isinstance(transformer_options, dict) else None
         bsz = context.shape[0]
@@ -211,7 +227,7 @@ class CrossAttnWrapper(StabilizerMixin, nn.Module):
 
         # concat never normalizes, so the fade multiplies the raw weight.
         combined = _combine_concat(
-            individuals, [w * f for w, f in zip(weights, fades)],
+            individuals, [w * f for w, f in zip(weights, fades)], real_lens,
         )
         # extra_fp folds the effective weight*fade into the static fingerprint
         # so a mid-fade freeze on the combined path cannot lock a stale weight.
