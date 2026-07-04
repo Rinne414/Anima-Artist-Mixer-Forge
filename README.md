@@ -1,6 +1,16 @@
-# Anima-Artist-Mixer
+# Anima-Artist-Mixer-Forge
 
-A ComfyUI custom node that enables **multi-artist mixing** for the Anima model by hooking into its cross-attention layers.
+A ComfyUI custom node pack that enables **multi-artist mixing** for the Anima model by hooking into its cross-attention layers.
+
+> **Forge notice:** this is a community fork ("forge") of
+> [An1X3R/Anima-Artist-Mixer](https://github.com/An1X3R/Anima-Artist-Mixer).
+> It continues the v26 line (submitted upstream as
+> [PR #4](https://github.com/An1X3R/Anima-Artist-Mixer/pull/4)) and adds new
+> nodes going forward. Node names are unchanged, so workflows built for the
+> original keep loading — but do **not** install both packs at the same time:
+> they define the same node names and would shadow each other. On the ComfyUI
+> registry this pack is `anima-artist-mixer-forge` (the original is
+> `anima-artist-mixer`).
 
 ![surtr](docs/images/hero.jpg)
 ## What it does
@@ -11,7 +21,7 @@ The bundled `AnimaArtistPack` node provides a one-shot experience: write your ar
 
 Product principle: the default path is predictable artist mixing on top of the base model. It should preserve the prompt and expose artist influence in a controllable way; automatic low-drift routing and stabilizers are opt-in tools, not the default style source.
 
-The current release (v26) keeps the original controllable artist-mixer path, then makes the preset workflow clearer and safer. `balanced` stays close to the original mixer behavior; `prompt_passthrough` uses the no-mixer/direct-prompt path while preserving positive `1.2::tag::` weighting syntax; `drift_auto` and the scene presets are opt-in low-drift routes. v26 also supports prefix artist weights (`1.2::artist::`), base-prompt tag weights (`1.2::masterpiece::`), negative artist weights for style subtraction, timing fades (`%0.0-0.45~0.1`), recipes, the layer probe, VRAM controls, a CFG correctness fix for batch sizes > 1, sample workflow fixes, and tests/CI. Existing per-artist layer and timing routes remain supported. See [CHANGELOG.md](CHANGELOG.md).
+The current release line (v26; Forge releases start at v27) keeps the original controllable artist-mixer path, then makes the preset workflow clearer and safer. `balanced` stays close to the original mixer behavior; `prompt_passthrough` uses the no-mixer/direct-prompt path while preserving positive `1.2::tag::` weighting syntax; `drift_auto` and the scene presets are opt-in low-drift routes. v26 also supports prefix artist weights (`1.2::artist::`), base-prompt tag weights (`1.2::masterpiece::`), negative artist weights for style subtraction, timing fades (`%0.0-0.45~0.1`), recipes, the layer probe, VRAM controls, a CFG correctness fix for batch sizes > 1, sample workflow fixes, and tests/CI. Existing per-artist layer and timing routes remain supported. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Quick links
 
@@ -20,18 +30,26 @@ The current release (v26) keeps the original controllable artist-mixer path, the
 - [Layer role workflow](workflow/artist-layer-role-routing.json) — character / clothing / background routing example
 - [Full documentation](docs/USAGE.md) — usage, parameters, modes, stabilizers, performance tips
 - [Changelog](CHANGELOG.md) — version history
-- [Issues](https://github.com/An1X3R/Anima-Artist-Mixer/issues) — bug reports, feature requests
-- [Discussions](https://github.com/An1X3R/Anima-Artist-Mixer/discussions) — usage questions, results sharing
+- [Issues](https://github.com/peter119lee/Anima-Artist-Mixer-Forge/issues) — bug reports, feature requests
+- [Discussions](https://github.com/peter119lee/Anima-Artist-Mixer-Forge/discussions) — usage questions, results sharing
 
 ## Installation
 
-Clone or download into your ComfyUI `custom_nodes` directory:
+Via [ComfyUI-Manager](https://github.com/Comfy-Org/ComfyUI-Manager) or [comfy-cli](https://docs.comfy.org/comfy-cli/getting-started), using the registry id:
 
 ```
-ComfyUI/custom_nodes/<this-plugin-folder>/
+comfy node registry-install anima-artist-mixer-forge
+```
+
+Or clone into your ComfyUI `custom_nodes` directory:
+
+```
+git clone https://github.com/peter119lee/Anima-Artist-Mixer-Forge
 ```
 
 Restart ComfyUI. No extra dependencies.
+
+If the original `Anima-Artist-Mixer` is installed, remove or disable it first — both packs define the same node names.
 
 ## Requirements
 
@@ -202,9 +220,11 @@ python -m pytest -q
 
 CI runs `ruff` plus `pytest` on Python 3.10/3.12 for pushes to main and all PRs.
 
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for how to add a new node and how releases are published to the ComfyUI registry.
+
 ## Acknowledgements
 
-Special thanks to **汐浮尘/utowo** for co-development, testing, and design contributions. The `AnimaArtistPack` split-and-encode design comes from their improvement.
+This pack is a fork of [An1X3R/Anima-Artist-Mixer](https://github.com/An1X3R/Anima-Artist-Mixer) — full credit to **An1X3R** for the original project. Special thanks to **汐浮尘/utowo** for co-development, testing, and design contributions. The `AnimaArtistPack` split-and-encode design comes from their improvement.
 
 ## License
 

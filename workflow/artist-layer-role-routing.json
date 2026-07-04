@@ -138,7 +138,7 @@
         }
       ],
       "properties": {
-        "cnr_id": "anima-artist-mixer",
+        "cnr_id": "anima-artist-mixer-forge",
         "Node name for S&R": "AnimaArtistPack"
       },
       "widgets_values": [
@@ -182,7 +182,7 @@
         }
       ],
       "properties": {
-        "cnr_id": "anima-artist-mixer",
+        "cnr_id": "anima-artist-mixer-forge",
         "Node name for S&R": "AnimaArtistPreset"
       },
       "widgets_values": [
@@ -249,7 +249,7 @@
         }
       ],
       "properties": {
-        "cnr_id": "anima-artist-mixer",
+        "cnr_id": "anima-artist-mixer-forge",
         "Node name for S&R": "AnimaArtistPresetApply"
       },
       "widgets_values": [
@@ -489,7 +489,7 @@
         }
       ],
       "properties": {
-        "cnr_id": "anima-artist-mixer",
+        "cnr_id": "anima-artist-mixer-forge",
         "Node name for S&R": "AnimaArtistChainPreview"
       },
       "widgets_values": [

@@ -1,19 +1,19 @@
 [project]
-name = "anima-artist-mixer"
-description = "A ComfyUI custom node that enables multi-artist mixing for the Anima model by hooking into its cross-attention layers."
-version = "26.2.0"
+name = "anima-artist-mixer-forge"
+description = "Forge fork of Anima-Artist-Mixer: a ComfyUI node pack for multi-artist mixing on the Anima model by hooking into its cross-attention layers."
+version = "27.0.0"
 license = { file = "LICENSE" }
 dependencies = []
 readme = "README.md"
 requires-python = ">=3.10"
 
 [project.urls]
-Repository = "https://github.com/An1X3R/Anima-Artist-Mixer"
-"Bug Tracker" = "https://github.com/An1X3R/Anima-Artist-Mixer/issues"
+Repository = "https://github.com/peter119lee/Anima-Artist-Mixer-Forge"
+"Bug Tracker" = "https://github.com/peter119lee/Anima-Artist-Mixer-Forge/issues"
 
 [tool.comfy]
-PublisherId = "an1x3r"
-DisplayName = "Anima Artist Mixer"
+PublisherId = "peter119lee"
+DisplayName = "Anima Artist Mixer Forge"
 Icon = ""
 
 [tool.ruff]

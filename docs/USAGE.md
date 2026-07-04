@@ -1,4 +1,4 @@
-# Anima-Artist-Mixer
+# Anima-Artist-Mixer-Forge
 
 ## Introduction
 

@@ -1,5 +1,24 @@
 # Changelog
 
+## v27.0.0 (2026-07-04)
+
+Forge fork point. Packaging identity only — runtime behavior is identical to
+v26.2.0.
+
+- Forked from [An1X3R/Anima-Artist-Mixer](https://github.com/An1X3R/Anima-Artist-Mixer)
+  as **Anima-Artist-Mixer-Forge**; the v26 line was submitted upstream as
+  [PR #4](https://github.com/An1X3R/Anima-Artist-Mixer/pull/4) and development
+  (including new nodes) continues here.
+- New ComfyUI registry id `anima-artist-mixer-forge` (publisher
+  `peter119lee`); repository moved to
+  https://github.com/peter119lee/Anima-Artist-Mixer-Forge.
+- Node class names and display names are unchanged, so existing workflows
+  load as-is. Do not install this pack alongside the original — they define
+  the same node names.
+- Bundled workflow metadata (`cnr_id`) now points at the forge pack id.
+- New [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md): how to add a node, the test
+  guards, and the release/publish flow.
+
 ## v26.2.0 (2026-07-04)
 
 Fixes from a full four-track review (parsing, runtime state lifecycle,
