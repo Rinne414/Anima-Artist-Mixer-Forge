@@ -927,6 +927,14 @@ Three nodes provide three levels of evidence, from free to definitive:
    but it cannot tell known tags from unknown ones — live calibration on
    Anima showed real artists (shift 0.013–0.039) and gibberish (0.015–0.035)
    overlap — so treat it as a redundancy check, not a liveness oracle.
+   Since v27.3 the report also carries a **danbooru tag check** section from a
+   bundled vocabulary (~140k tags, post counts, aliases): it catches typos,
+   aliases (with the canonical name to prefer), and wrong-category entries
+   like a character tag in the artist chain. `AnimaArtistChainPreview` runs
+   the same section with no CLIP at all. "Not found" is worded carefully:
+   the list is a filtered snapshot, so a small or recent artist can be
+   missing (the real tag `uof` is one such case) — confirm with a solo A/B
+   before deleting a tag.
 2. **`AnimaArtistABVariants` (run level)** — turns one chain into a list of
    chain variants; ComfyUI's list fan-out then executes the downstream graph
    once per variant with the same seed. Wire `artist_chain` ->

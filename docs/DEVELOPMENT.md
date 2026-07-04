@@ -17,6 +17,11 @@ How to add a new node to this pack and ship it to the ComfyUI registry.
   that need a running ComfyUI at `http://127.0.0.1:8188`.
 - `workflow/` and `sample workflow.json` — bundled workflows, validated by
   `tests/test_workflow_json.py`.
+- `anima_mixer/data/danbooru_tags.csv.gz` — bundled Danbooru tag metadata
+  used by the ChainPreview/TagCheck vocabulary check; rebuild with
+  `tools/build_tag_vocab.py` (provenance in its docstring). Keep the
+  snapshot roughly aligned with the base model's training cutoff — newer is
+  not automatically better.
 
 ## Adding a node
 

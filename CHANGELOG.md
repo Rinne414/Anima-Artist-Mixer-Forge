@@ -1,5 +1,28 @@
 # Changelog
 
+## v27.3.0 (2026-07-05)
+
+Bundled Danbooru tag vocabulary: the reliable "does this tag exist" check
+that v27.1's live calibration proved impossible at the encoder level.
+
+- New `anima_mixer/data/danbooru_tags.csv.gz` (~1.4 MB): factual Danbooru
+  tag metadata (name, category, post count, aliases; ~140k tags + ~30k
+  aliases) from the community a1111-sd-webui-tagcomplete list; rebuild with
+  `tools/build_tag_vocab.py` (provenance and rationale in its docstring).
+- `AnimaArtistChainPreview` and `AnimaArtistTagCheck` reports gain a
+  per-artist "danbooru tag check" section: known artist tag (with post
+  count and a low-count warning), alias of a canonical tag, wrong-category
+  tag (e.g. a character tag in the artist chain), or not-in-list.
+- The wording is deliberately honest: the list is a filtered snapshot, so
+  "not found" means a typo OR a small/new artist below the snapshot's
+  threshold (the real artist tag `uof` is absent, for example) — never
+  "the model does not know it". The solo A/B (ABVariants + ImpactMap)
+  stays the definitive test.
+- The vocabulary loads lazily on first use (~30 MB resident, process
+  lifetime) and is shared by both nodes; node signatures are unchanged.
+- `chain_artist_names` moved into `chain_tools` (shared by ABVariants and
+  the vocabulary wiring).
+
 ## v27.2.0 (2026-07-04)
 
 Probe report v2 and a node-menu reorganization. No node signatures changed;
