@@ -200,7 +200,7 @@ For speed, first limit the active artist count, layer range, or sampling window 
 
 ## Measuring where styles live (v26)
 
-Instead of guessing `@layers` routes, wire `AnimaArtistProbe` between your model loader and the sampler, run one generation, and read `AnimaArtistProbeReport` (connect any post-sampler output as its trigger). The report shows each artist's per-layer style influence (`||artist_out − base_out|| / ||base_out||`) as a bar chart and suggests a concrete `artist@lo-hi` route per artist. The probe pass does not alter the generated image.
+Instead of guessing `@layers` routes, wire `AnimaArtistProbe` between your model loader and the sampler, run one generation, and read `AnimaArtistProbeReport` (connect any post-sampler output as its trigger). The report shows each artist's per-layer style influence (`||artist_out − base_out|| / ||base_out||`) as a bar chart and suggests a concrete `artist@lo-hi` route per artist. The probe pass does not alter the generated image. Since v27.2 the report opens with a per-artist **contribution split** (share of total influence with a plain-language verdict — dominant / balanced / weak / negligible) and **per-step influence curves** showing when in sampling each artist matters.
 
 ## Checking whether each artist actually works (v27.1)
 
@@ -211,6 +211,8 @@ Three diagnostics nodes answer "is this artist doing anything, what did it chang
 - **Anima Artist Impact Map (A/B Diff)** — give it two same-seed renders (for example `01_no_mixer` vs `03_solo_wlop`) and it returns an `[A | B | change-overlay]` triptych, an impact score, changed-area %, composition-vs-texture and luminance splits, and a plain-language verdict ("no visible change" when an artist or setting did nothing).
 
 See [`workflow/node_usage_showcase/07_diagnostics_tagcheck_ab_impact.json`](workflow/node_usage_showcase/07_diagnostics_tagcheck_ab_impact.json) for all three wired together.
+
+Since v27.2 the node menu groups the pack into `Anima/Basic`, `Anima/Setup`, `Anima/Diagnostics`, and `Anima/Recipes` (menu-only; node ids and saved workflows are unaffected).
 
 ## Sharing recipes (v26)
 

@@ -952,6 +952,17 @@ that tag does not affect the image at all (misspelled or unknown); if it
 shows impact but not the style you wanted, the tag is live but weak — try a
 `::weight` or check the probe's per-layer report.
 
+Since v27.2 the probe report (`AnimaArtistProbeReport`) also opens with a
+per-artist contribution split — each artist's share of the total measured
+influence plus a plain-language verdict (dominant / balanced / weak /
+negligible, judged against an equal split) — and per-step influence curves
+that show when in sampling each artist matters (left = high sigma / start).
+A "dominant" verdict explains one artist drowning out the rest; "negligible"
+means the mixer barely touches that artist's attention even though the tag
+encodes fine. All diagnostics nodes live under the `Anima/Diagnostics` menu
+category (the menu is split into `Anima/Basic`, `Anima/Setup`,
+`Anima/Diagnostics`, `Anima/Recipes` since v27.2).
+
 ## Known issues
 
 ### `model_function_wrapper` chain conflicts

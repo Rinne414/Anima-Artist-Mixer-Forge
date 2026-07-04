@@ -1,5 +1,31 @@
 # Changelog
 
+## v27.2.0 (2026-07-04)
+
+Probe report v2 and a node-menu reorganization. No node signatures changed;
+existing workflows keep loading.
+
+### Probe report v2
+- `AnimaArtistProbeReport` now opens with a contribution split: each
+  artist's share of the summed mean influence, its ratio vs an equal split,
+  and a plain-language verdict (dominant / balanced / weak / negligible).
+- New per-step influence curves (ASCII, sampling order = high sigma to low)
+  show WHEN each artist matters: mean influence over layers at every
+  measured step. Probe data recorded by older versions simply omits the
+  section.
+- The probe wrapper additionally accumulates sigma-keyed per-step stats
+  (`probe_step_stats`), cleared by the run-start reset like the other probe
+  accumulators; the report computations live in the new pure module
+  `anima_mixer/probe_stats.py`.
+
+### Node menu
+- The single `Anima/CrossAttn` category is split into `Anima/Basic`
+  (Basic, Starter), `Anima/Setup` (Pack, Preset, Apply Preset, both Options
+  nodes, Chain Builder, Cross-Attn), `Anima/Diagnostics` (Inspector, Chain
+  Preview, Probe, Probe Report, Tag Check, A/B Variants, Impact Map) and
+  `Anima/Recipes` (Recipe Save/Load). Menu-only metadata: node ids, display
+  names, and saved workflows are unaffected.
+
 ## v27.1.0 (2026-07-04)
 
 Diagnostics: three new nodes that answer "is each artist actually working,

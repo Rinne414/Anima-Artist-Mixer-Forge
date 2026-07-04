@@ -65,6 +65,7 @@ $server = "http://127.0.0.1:8188"
 
 ## 设计原则
 
+- v27.2 起节点菜单分为 `Anima/Basic`（入门）、`Anima/Setup`（标准接线）、`Anima/Diagnostics`（诊断）、`Anima/Recipes`（配方）四组；只影响菜单位置，节点 ID 和已保存的 workflow 不受影响。
 - 新手只需要 `AnimaArtistBasic`。
 - 常规 preset 工作流使用 `AnimaArtistPack + AnimaArtistPreset + AnimaArtistPresetApply`。
 - preset apply 节点不显示 `combine_mode`、`fusion_mode`、`strength`，因为这些值由 preset 决定。
