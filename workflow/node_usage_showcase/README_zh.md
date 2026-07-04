@@ -1,6 +1,6 @@
 # Anima 节点用途展示 workflow
 
-这个文件夹用来说明当前 15 个节点各自为什么存在，以及应该在什么场景使用。
+这个文件夹用来说明当前 18 个节点各自为什么存在，以及应该在什么场景使用。
 
 这些文件是 **ComfyUI API workflow**。可以像 `workflow/pr4_self_test_api` 一样用 `/prompt` 提交运行，也可以只作为接线参考。
 
@@ -38,8 +38,9 @@ $server = "http://127.0.0.1:8188"
 | `04_chain_builder_preview_manual_crossattn.json` | `AnimaArtistChainBuilder`, `AnimaArtistChainPreview`, `AnimaArtistOptions`, `AnimaArtistCrossAttn`, `AnimaArtistInspector` | 手动高级路线；需要直接控制 `combine_mode` / `fusion_mode` / `strength` 时使用 |
 | `05_recipe_save_load_share.json` | `AnimaArtistPreset`, `AnimaArtistRecipeSave`, `AnimaArtistRecipeLoad`, `AnimaArtistPack`, `AnimaArtistPresetApply`, `AnimaArtistInspector` | 保存和载入可分享 recipe |
 | `06_probe_and_report.json` | `AnimaArtistPack`, `AnimaArtistProbe`, `AnimaArtistProbeReport` | 测量 artist 风格主要影响哪些层 |
+| `07_diagnostics_tagcheck_ab_impact.json` | `AnimaArtistTagCheck`, `AnimaArtistABVariants`, `AnimaArtistImpactMap` | 验证每个 artist 是否真的起作用：重复 tag 检测、同 seed A/B 变体系列、差异热图 |
 
-## 15 个节点的覆盖情况
+## 18 个节点的覆盖情况
 
 | 节点 | 出现位置 |
 |---|---|
@@ -58,6 +59,9 @@ $server = "http://127.0.0.1:8188"
 | `AnimaArtistRecipeLoad` | `05_recipe_save_load_share.json` |
 | `AnimaArtistProbe` | `06_probe_and_report.json` |
 | `AnimaArtistProbeReport` | `06_probe_and_report.json` |
+| `AnimaArtistTagCheck` | `07_diagnostics_tagcheck_ab_impact.json` |
+| `AnimaArtistABVariants` | `07_diagnostics_tagcheck_ab_impact.json` |
+| `AnimaArtistImpactMap` | `07_diagnostics_tagcheck_ab_impact.json` |
 
 ## 设计原则
 
@@ -66,4 +70,5 @@ $server = "http://127.0.0.1:8188"
 - preset apply 节点不显示 `combine_mode`、`fusion_mode`、`strength`，因为这些值由 preset 决定。
 - 需要手动控制这些值时，才使用 `AnimaArtistCrossAttn (Manual/Advanced)`。
 - `Inspector`、`Probe`、`ProbeReport` 是调试和证明用节点，不是普通出图必需节点。
+- `TagCheck`、`ABVariants`、`ImpactMap` 是 v27.1 新增的诊断节点：先用 `ABVariants` 生成同 seed 对比系列，再用 `ImpactMap` 量化每个 artist 改变了什么、改变多强。`TagCheck` 免费检测重复/别名 tag，但无法判断模型认不认识某个 tag（编码层面真假 artist 无法区分，已实测）。
 - `RecipeSave` / `RecipeLoad` 是分享配置用节点，不是普通出图必需节点。

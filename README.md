@@ -202,6 +202,16 @@ For speed, first limit the active artist count, layer range, or sampling window 
 
 Instead of guessing `@layers` routes, wire `AnimaArtistProbe` between your model loader and the sampler, run one generation, and read `AnimaArtistProbeReport` (connect any post-sampler output as its trigger). The report shows each artist's per-layer style influence (`||artist_out − base_out|| / ||base_out||`) as a bar chart and suggests a concrete `artist@lo-hi` route per artist. The probe pass does not alter the generated image.
 
+## Checking whether each artist actually works (v27.1)
+
+Three diagnostics nodes answer "is this artist doing anything, what did it change, and how strongly":
+
+- **Anima Artist Tag Check (Encoder)** — wire it to `AnimaArtistPack`'s output. Zero extra cost: it reuses the conditionings already in the pack and flags `[DUPLICATE]` entries (repeats or aliases that encode the same style vector) and exact `[NO-OP]` entries. It deliberately does *not* claim to detect unknown tags: on Anima's LLM encoder, real artists and gibberish overlap in encoder shift, so runtime evidence has to come from the next two nodes or the layer probe.
+- **Anima Artist A/B Variants** — feed it your chain, wire its `artist_chain` output into `AnimaArtistPack.artist_chain` and its `label` output into `SaveImage.filename_prefix`. One queue then renders a same-seed comparison series (no-mixer baseline, full mix, plus `solo_each` / `leave_one_out` / `cumulative` variants). This is the definitive "is artist X doing anything" test.
+- **Anima Artist Impact Map (A/B Diff)** — give it two same-seed renders (for example `01_no_mixer` vs `03_solo_wlop`) and it returns an `[A | B | change-overlay]` triptych, an impact score, changed-area %, composition-vs-texture and luminance splits, and a plain-language verdict ("no visible change" when an artist or setting did nothing).
+
+See [`workflow/node_usage_showcase/07_diagnostics_tagcheck_ab_impact.json`](workflow/node_usage_showcase/07_diagnostics_tagcheck_ab_impact.json) for all three wired together.
+
 ## Sharing recipes (v26)
 
 `AnimaArtistRecipeSave` packs the artist chain plus the full effective configuration (combine/fusion/strength/advanced options) into one JSON string; `AnimaArtistRecipeLoad` turns it back into `artist_chain` + a `preset` payload you can wire straight into `AnimaArtistPresetApply`. Paste-friendly for sharing exact mixes with other users.

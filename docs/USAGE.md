@@ -913,6 +913,45 @@ Different sampling stages determine different image content (high sigma = compos
 
 Implementation detail: the node uses `set_model_unet_function_wrapper` to capture the current sigma at each `apply_model` call, then maps user-set percent ranges to sigma ranges via `model_sampling.percent_to_sigma()`.
 
+## Diagnostics: is each artist actually working? (v27.1)
+
+Three nodes provide three levels of evidence, from free to definitive:
+
+1. **`AnimaArtistTagCheck` (encoder level, free)** — connect the `artist_pack`
+   output. It compares each artist's conditioning against the base prompt's
+   conditioning and against the other artists, with no sampling and no extra
+   CLIP encodes. Reliable verdicts: `[DUPLICATE]` (two entries encode the same
+   style vector — a repeat or an alias; pairwise cosine >= 0.999) and
+   `[NO-OP]` (an entry that encodes identically to the base prompt). The
+   per-artist `shift` number ranks how much each entry perturbs the encoding,
+   but it cannot tell known tags from unknown ones — live calibration on
+   Anima showed real artists (shift 0.013–0.039) and gibberish (0.015–0.035)
+   overlap — so treat it as a redundancy check, not a liveness oracle.
+2. **`AnimaArtistABVariants` (run level)** — turns one chain into a list of
+   chain variants; ComfyUI's list fan-out then executes the downstream graph
+   once per variant with the same seed. Wire `artist_chain` ->
+   `AnimaArtistPack.artist_chain` and `label` -> `SaveImage.filename_prefix`.
+   Modes: `solo_each` (each artist alone), `leave_one_out` (full mix minus
+   one artist), `cumulative` (add artists one by one), `off_vs_full`.
+   Weights, `@layers` and `%timing` routes stay attached to their artist in
+   every variant. Each variant is a full sampling run — budget accordingly.
+3. **`AnimaArtistImpactMap` (image level)** — compares two same-seed renders.
+   Outputs a visualization (`triptych` = `[A | B | change overlay]`,
+   `overlay`, or raw `heatmap`), a report, and an `impact_score` (mean
+   absolute difference x 100). The report splits the change into
+   composition (low-frequency) vs texture (high-frequency) and luminance,
+   and reports the changed-area fraction. `auto_gain` rescales the heatmap
+   so the strongest change is visible; switch it off (fixed `gain`) when you
+   want heatmaps from different runs on one comparable scale. A same-seed
+   pair with impact below 0.1% reads as "no visible change" — the tested
+   artist or setting did nothing.
+
+Typical loop: run `ABVariants(solo_each)` once, then feed `01_no_mixer` plus
+any solo render into `ImpactMap`. If a solo render shows near-zero impact,
+that tag does not affect the image at all (misspelled or unknown); if it
+shows impact but not the style you wanted, the tag is live but weak — try a
+`::weight` or check the probe's per-layer report.
+
 ## Known issues
 
 ### `model_function_wrapper` chain conflicts

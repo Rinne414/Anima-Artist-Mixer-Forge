@@ -1,5 +1,48 @@
 # Changelog
 
+## v27.1.0 (2026-07-04)
+
+Diagnostics: three new nodes that answer "is each artist actually working,
+what did it change, and how strongly" — plus live GPU validation of the
+v26.2.0 runtime fixes.
+
+### New nodes
+- `AnimaArtistTagCheck` (Anima Artist Tag Check (Encoder)): free encoder-level
+  check straight from the pack — flags `[DUPLICATE]` entries (repeat/alias
+  tags that encode the same style vector; pairwise cosine >= 0.999, validated
+  live) and exact `[NO-OP]` entries. It deliberately does NOT claim to detect
+  unknown tags: live calibration showed encoder shift cannot separate real
+  artists from gibberish on Anima's LLM encoder (real 0.013-0.039 vs
+  gibberish 0.015-0.035, overlapping, with a real artist as the top outlier).
+- `AnimaArtistABVariants` (Anima Artist A/B Variants): emits a list of chain
+  variants (off / full / solo_each / leave_one_out / cumulative) plus
+  filename-safe labels; ComfyUI's list fan-out renders the whole same-seed
+  comparison series in one queue. Weights, `@layers` and `%timing` routes
+  stay attached to their artist, including comma layer routes.
+- `AnimaArtistImpactMap` (Anima Artist Impact Map (A/B Diff)): compares two
+  same-seed renders — triptych/overlay/heatmap visualization, impact score,
+  changed-area %, composition(low-freq) vs texture(high-freq) and luminance
+  splits, and a plain-language verdict.
+
+### Validation
+- Cleared the live-GPU validation debt from v26.2.0: 24/24 smoke matrix
+  cases pass (RTX 3090, ComfyUI 0.26.2).
+- Same-seed production A/B (1536x1024/32 steps) old-vs-new: `balanced` output
+  is bit-identical (0.00% diff); `fast_preview` / `compatibility_safe` change
+  by ~6%, concentrated on the styled figure — the intended effect of the
+  v26.2.0 concat_with_base CFG fix, visually verified (no smearing/washout).
+- New manual harnesses: `tests/live_diagnostics_check.py` (the three nodes
+  end-to-end) and `tests/live_ab_capture.py` (fixed-seed A/B capture).
+- `tests/live_comfy_smoke.py`: added the missing `stabilizer_end_percent` to
+  `default_opts` — without it every direct-AnimaArtistOptions case failed
+  ComfyUI submit validation (the matrix had not been re-run since that
+  widget was added).
+
+### Workflows
+- New showcase `workflow/node_usage_showcase/07_diagnostics_tagcheck_ab_impact.json`:
+  all three diagnostics nodes wired (variant fan-out + no-mixer baseline
+  branch + impact map), counted by the showcase coverage guard.
+
 ## v27.0.0 (2026-07-04)
 
 Forge fork point. Packaging identity only — runtime behavior is identical to
