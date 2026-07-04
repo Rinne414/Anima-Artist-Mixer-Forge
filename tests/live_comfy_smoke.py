@@ -57,6 +57,7 @@ def default_opts(**over):
         "artist_anchor_q": False,
         "anchor_seeds_count": 1, "anchor_user_blend": 0.0,
         "anchor_deep_layer_threshold": -1, "anchor_refresh_each_step": False,
+        "stabilizer_end_percent": 1.0,
         "layer_filter": "",
         "compatibility_mode": False, "max_batch_artists": 0,
         "low_vram_cache": False, "match_base_norm": True,
