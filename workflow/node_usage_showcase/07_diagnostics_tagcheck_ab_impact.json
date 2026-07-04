@@ -1,0 +1,175 @@
+{
+  "1": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "anima-base-v1.0.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "2": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_3_06b_base.safetensors",
+      "type": "stable_diffusion",
+      "device": "default"
+    }
+  },
+  "3": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    }
+  },
+  "4": {
+    "class_type": "AnimaArtistABVariants",
+    "inputs": {
+      "artist_chain": "@raisuta, @yuchi \\(salmon-1000\\)",
+      "mode": "solo_each",
+      "include_no_mixer": true,
+      "include_full_mix": true
+    }
+  },
+  "5": {
+    "class_type": "AnimaArtistPack",
+    "inputs": {
+      "clip": ["2", 0],
+      "artist_chain": ["4", 0],
+      "base_prompt": "recent, full body idol stage portrait, blue and white frilly idol dress, bright stage lights, detailed background"
+    }
+  },
+  "6": {
+    "class_type": "AnimaArtistPreset",
+    "inputs": {
+      "preset": "balanced",
+      "intensity": 1.0,
+      "normalize_weights": true,
+      "layer_mode": "auto",
+      "custom_layer_filter": ""
+    }
+  },
+  "7": {
+    "class_type": "AnimaArtistPresetApply",
+    "inputs": {
+      "model": ["1", 0],
+      "artist_pack": ["5", 0],
+      "preset": ["6", 0],
+      "enabled": true,
+      "apply_to_uncond": false
+    }
+  },
+  "8": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "nsfw, nude, naked, bare chest, cleavage, nipples, cropped head, head out of frame, lowres, worst quality, bad anatomy",
+      "clip": ["2", 0]
+    }
+  },
+  "9": {
+    "class_type": "EmptyLatentImage",
+    "inputs": {
+      "width": 512,
+      "height": 512,
+      "batch_size": 1
+    }
+  },
+  "10": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["7", 0],
+      "positive": ["7", 1],
+      "negative": ["8", 0],
+      "latent_image": ["9", 0],
+      "seed": 66006006,
+      "steps": 8,
+      "cfg": 5.0,
+      "sampler_name": "er_sde",
+      "scheduler": "beta",
+      "denoise": 1.0
+    }
+  },
+  "11": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["10", 0],
+      "vae": ["3", 0]
+    }
+  },
+  "12": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["11", 0],
+      "filename_prefix": ["4", 1]
+    }
+  },
+  "13": {
+    "class_type": "AnimaArtistPack",
+    "inputs": {
+      "clip": ["2", 0],
+      "artist_chain": "",
+      "base_prompt": "recent, full body idol stage portrait, blue and white frilly idol dress, bright stage lights, detailed background"
+    }
+  },
+  "14": {
+    "class_type": "AnimaArtistPresetApply",
+    "inputs": {
+      "model": ["1", 0],
+      "artist_pack": ["13", 0],
+      "preset": ["6", 0],
+      "enabled": true,
+      "apply_to_uncond": false
+    }
+  },
+  "15": {
+    "class_type": "KSampler",
+    "inputs": {
+      "model": ["14", 0],
+      "positive": ["14", 1],
+      "negative": ["8", 0],
+      "latent_image": ["9", 0],
+      "seed": 66006006,
+      "steps": 8,
+      "cfg": 5.0,
+      "sampler_name": "er_sde",
+      "scheduler": "beta",
+      "denoise": 1.0
+    }
+  },
+  "16": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["15", 0],
+      "vae": ["3", 0]
+    }
+  },
+  "17": {
+    "class_type": "AnimaArtistImpactMap",
+    "inputs": {
+      "image_a": ["16", 0],
+      "image_b": ["11", 0],
+      "layout": "triptych",
+      "auto_gain": true,
+      "gain": 4.0
+    }
+  },
+  "18": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": ["17", 0],
+      "filename_prefix": "anima_node_usage_07_impact"
+    }
+  },
+  "19": {
+    "class_type": "AnimaArtistPack",
+    "inputs": {
+      "clip": ["2", 0],
+      "artist_chain": "@raisuta, @yuchi \\(salmon-1000\\)",
+      "base_prompt": "recent, full body idol stage portrait, blue and white frilly idol dress, bright stage lights, detailed background"
+    }
+  },
+  "20": {
+    "class_type": "AnimaArtistTagCheck",
+    "inputs": {
+      "artist_pack": ["19", 0]
+    }
+  }
+}

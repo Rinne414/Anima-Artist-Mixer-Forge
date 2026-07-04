@@ -13,6 +13,11 @@ from .nodes_core import (
     AnimaArtistProbe,
     AnimaArtistProbeReport,
 )
+from .nodes_diagnostics import (
+    AnimaArtistABVariants,
+    AnimaArtistImpactMap,
+    AnimaArtistTagCheck,
+)
 from .nodes_ui import (
     AnimaArtistChainBuilder,
     AnimaArtistChainPreview,
@@ -41,6 +46,9 @@ NODE_CLASS_MAPPINGS = {
     "AnimaArtistRecipeLoad": AnimaArtistRecipeLoad,
     "AnimaArtistProbe": AnimaArtistProbe,
     "AnimaArtistProbeReport": AnimaArtistProbeReport,
+    "AnimaArtistTagCheck": AnimaArtistTagCheck,
+    "AnimaArtistABVariants": AnimaArtistABVariants,
+    "AnimaArtistImpactMap": AnimaArtistImpactMap,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -59,6 +67,9 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "AnimaArtistRecipeLoad": "Anima Artist Recipe (Load)",
     "AnimaArtistProbe": "Anima Artist Layer Probe",
     "AnimaArtistProbeReport": "Anima Artist Probe Report",
+    "AnimaArtistTagCheck": "Anima Artist Tag Check (Encoder)",
+    "AnimaArtistABVariants": "Anima Artist A/B Variants",
+    "AnimaArtistImpactMap": "Anima Artist Impact Map (A/B Diff)",
 }
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
