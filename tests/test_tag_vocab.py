@@ -95,6 +95,45 @@ class LookupWithInjectedVocabTests(unittest.TestCase):
         self.assertIn("zzqqx9999", lines[2])
 
 
+class SuggestionTests(unittest.TestCase):
+    def setUp(self):
+        tag_vocab._VOCAB_CACHE = (
+            {
+                "yuchi_(salmon-1000)": (1, 208),
+                "sakimichan": (1, 1014),
+                "sakimori": (1, 30),
+                "hatsune_miku": (4, 106634),  # non-artist: never suggested
+            },
+            {},
+        )
+
+    def tearDown(self):
+        tag_vocab._VOCAB_CACHE = None
+
+    def test_missing_disambiguator_suggested(self):
+        self.assertIn("yuchi_(salmon-1000)", tag_vocab.suggest_artists("yuchi"))
+
+    def test_typo_fuzzy_suggested(self):
+        self.assertIn("sakimichan", tag_vocab.suggest_artists("sakimichann"))
+
+    def test_gibberish_gets_no_suggestions(self):
+        self.assertEqual(tag_vocab.suggest_artists("zzqqxx9999"), [])
+
+    def test_non_artist_categories_never_suggested(self):
+        self.assertNotIn("hatsune_miku", tag_vocab.suggest_artists("hatsune_mik"))
+
+    def test_describe_not_found_includes_did_you_mean(self):
+        line = tag_vocab.describe("@yuchi")
+        self.assertIn("not in the bundled", line)
+        self.assertIn("did you mean", line)
+        self.assertIn("yuchi_(salmon-1000)", line)
+
+    def test_describe_not_found_without_candidates_stays_clean(self):
+        line = tag_vocab.describe("zzqqxx9999")
+        self.assertIn("not in the bundled", line)
+        self.assertNotIn("did you mean", line)
+
+
 class UnavailableVocabTests(unittest.TestCase):
     def setUp(self):
         tag_vocab._VOCAB_CACHE = False  # load previously failed

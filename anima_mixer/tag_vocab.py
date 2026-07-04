@@ -17,6 +17,7 @@ roughly 30 MB resident) and stays cached for the process lifetime.
 """
 
 import csv
+import difflib
 import gzip
 import logging
 import os
@@ -137,6 +138,35 @@ def lookup(name):
             "category": None, "count": None}
 
 
+def suggest_artists(tag, limit=3):
+    """Closest artist tags for a not-found entry (already-normalized form).
+
+    Two passes: (1) missing-disambiguator / substring hits, ranked by post
+    count — catches the common 'yuchi' -> 'yuchi_(salmon-1000)' case;
+    (2) difflib fuzzy matching over a first-letter + similar-length subset
+    (full-vocabulary fuzzy would be too slow at ~140k names).
+    """
+    tags, _ = load_vocab()
+    if tags is None or not tag:
+        return []
+    substr_hits = []
+    for name, (category, count) in tags.items():
+        if category != ARTIST_CATEGORY or name == tag:
+            continue
+        if name.startswith(tag + "_(") or (len(tag) >= 4 and tag in name):
+            substr_hits.append((count, name))
+    substr_hits.sort(reverse=True)
+    out = [name for _, name in substr_hits[:limit]]
+    if len(out) < limit:
+        pool = [
+            name for name, (category, _) in tags.items()
+            if category == ARTIST_CATEGORY and name[:1] == tag[:1]
+            and abs(len(name) - len(tag)) <= 2 and name not in out
+        ]
+        out.extend(difflib.get_close_matches(tag, pool, n=limit - len(out), cutoff=0.8))
+    return out
+
+
 def describe(name):
     """One human-readable verdict line body for an artist entry."""
     res = lookup(name)
@@ -157,10 +187,19 @@ def describe(name):
             f"a {kind} tag, not an artist — it still encodes, "
             "but it is not an artist style"
         )
-    return (
+    line = (
         "not in the bundled Danbooru list (typo? or a small/new artist "
         "below the snapshot's threshold) — confirm with a solo A/B"
     )
+    suggestions = suggest_artists(normalize_tag(name))
+    if suggestions:
+        tags, _ = load_vocab()
+        pretty = ", ".join(
+            f"'{s}' ({tags[s][1]} posts)" if tags and s in tags else f"'{s}'"
+            for s in suggestions
+        )
+        line += f"; did you mean: {pretty}?"
+    return line
 
 
 def report_lines(names):
