@@ -32,6 +32,7 @@ from .constants import (
     STATIC_CAPTURE_MODE_OUTPUT,
 )
 from .options import build_preset_payload, merge_runtime_options
+from .probe_stats import contribution_shares, render_step_curves, share_verdict
 from .parsing import (
     build_passthrough_prompt,
     expand_prompt_weights,
@@ -88,6 +89,7 @@ def _registry_store(probe_id, state):
         "probe_labels": state["probe_labels"],
         "probe_num_blocks": state["probe_num_blocks"],
         "_probe_seen_sigmas": state["_probe_seen_sigmas"],
+        "probe_step_stats": state.get("probe_step_stats"),
     }
     while len(PROBE_REGISTRY) > _PROBE_REGISTRY_LIMIT:
         PROBE_REGISTRY.pop(next(iter(PROBE_REGISTRY)))
@@ -140,7 +142,7 @@ class AnimaArtistPack:
     RETURN_TYPES = ("ANIMA_PACK",)
     RETURN_NAMES = ("artist_pack",)
     FUNCTION = "pack"
-    CATEGORY = "Anima/CrossAttn"
+    CATEGORY = "Anima/Setup"
 
     def pack(self, clip, artist_chain, base_prompt=""):
         raw_artist_chain = str(artist_chain or "").strip()
@@ -268,7 +270,7 @@ class AnimaArtistBasic:
     RETURN_TYPES = ("MODEL", "CONDITIONING")
     RETURN_NAMES = ("model", "base_prompt")
     FUNCTION = "apply"
-    CATEGORY = "Anima/CrossAttn"
+    CATEGORY = "Anima/Basic"
 
     def apply(self, model, clip, artist_chain, base_prompt, preset, intensity, enabled):
         cache_key = (artist_chain, base_prompt)
@@ -468,7 +470,7 @@ class AnimaArtistCrossAttn:
     RETURN_TYPES = ("MODEL", "CONDITIONING")
     RETURN_NAMES = ("model", "base_prompt")
     FUNCTION = "patch"
-    CATEGORY = "Anima/CrossAttn"
+    CATEGORY = "Anima/Setup"
 
     def patch(self, model, artist_pack, combine_mode, fusion_mode,
               strength, enabled, apply_to_uncond, advanced_options=None, preset=None):
@@ -870,7 +872,7 @@ class AnimaArtistPresetApply:
     RETURN_TYPES = ("MODEL", "CONDITIONING")
     RETURN_NAMES = ("model", "base_prompt")
     FUNCTION = "apply"
-    CATEGORY = "Anima/CrossAttn"
+    CATEGORY = "Anima/Setup"
 
     def apply(self, model, artist_pack, preset, enabled, apply_to_uncond,
               advanced_options=None):
@@ -916,7 +918,7 @@ class AnimaArtistProbe:
     RETURN_TYPES = ("MODEL", "CONDITIONING", "STRING")
     RETURN_NAMES = ("model", "base_prompt", "probe_id")
     FUNCTION = "probe"
-    CATEGORY = "Anima/CrossAttn"
+    CATEGORY = "Anima/Diagnostics"
 
     def probe(self, model, artist_pack, probe_steps=6):
         if not isinstance(artist_pack, dict):
@@ -973,6 +975,7 @@ class AnimaArtistProbe:
         )
         state["probe_steps"] = max(1, int(probe_steps))
         state["probe_stats"] = {}      # layer_idx -> [ [sum, count], ... ] per artist
+        state["probe_step_stats"] = {}  # sigma_key -> [ [sum, count], ... ] per artist
         state["probe_labels"] = labels
         state["probe_num_blocks"] = num_blocks
         state["_probe_seen_sigmas"] = set()
@@ -1050,11 +1053,25 @@ class _ProbeCrossAttnWrapper(CrossAttnWrapper):
         base_norm = float(base_sel.norm().item())
         if base_norm <= 1e-8:
             return base_out
+        # Per-step accumulation (v27.2 curves) mirrors the layer accumulation;
+        # skipped when the sigma is unknown (capture hook overridden).
+        step_row = None
+        if cur is not None:
+            step_stats = st.get("probe_step_stats")
+            if isinstance(step_stats, dict):
+                step_key = round(float(cur), 4)
+                step_row = step_stats.get(step_key)
+                if step_row is None:
+                    step_row = [[0.0, 0] for _ in range(n)]
+                    step_stats[step_key] = step_row
         for i, out_i in enumerate(outs):
             delta = out_i.detach().to(torch.float32)[row_mask] - base_sel
             rel = float(delta.norm().item()) / base_norm
             layer_stats[i][0] += rel
             layer_stats[i][1] += 1
+            if step_row is not None:
+                step_row[i][0] += rel
+                step_row[i][1] += 1
         return base_out
 
 
@@ -1088,7 +1105,7 @@ class AnimaArtistProbeReport:
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("report",)
     FUNCTION = "report"
-    CATEGORY = "Anima/CrossAttn"
+    CATEGORY = "Anima/Diagnostics"
     OUTPUT_NODE = True
 
     @classmethod
@@ -1136,10 +1153,24 @@ class AnimaArtistProbeReport:
             f"artists: {n}",
             f"layers: {num_blocks}",
             f"measured steps: {len(state.get('_probe_seen_sigmas') or [])}",
+        ]
+        totals, shares = contribution_shares(scores)
+        lines.append("")
+        lines.append("contribution split (share of summed mean influence):")
+        for i, label in enumerate(labels):
+            lines.append(
+                f"  {label}: {shares[i] * 100:.1f}% "
+                f"({shares[i] * n:.2f}x equal split) — {share_verdict(shares[i], n)}"
+            )
+        curve_lines = render_step_curves(state.get("probe_step_stats"), labels)
+        if curve_lines:
+            lines.append("")
+            lines.extend(curve_lines)
+        lines.extend([
             "",
             "relative style influence per layer "
             "(||artist_out - base_out|| / ||base_out||):",
-        ]
+        ])
         for i, label in enumerate(labels):
             row = scores[i]
             peak = max(row) if row else 0.0

@@ -88,7 +88,7 @@ class AnimaArtistTagCheck:
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("report",)
     FUNCTION = "check"
-    CATEGORY = "Anima/CrossAttn"
+    CATEGORY = "Anima/Diagnostics"
     OUTPUT_NODE = True
 
     def check(self, artist_pack):
@@ -315,7 +315,7 @@ class AnimaArtistABVariants:
     RETURN_NAMES = ("artist_chain", "label", "report")
     OUTPUT_IS_LIST = (True, True, False)
     FUNCTION = "build"
-    CATEGORY = "Anima/CrossAttn"
+    CATEGORY = "Anima/Diagnostics"
     OUTPUT_NODE = True
 
     def build(self, artist_chain, mode, include_no_mixer, include_full_mix):
@@ -419,7 +419,7 @@ class AnimaArtistImpactMap:
     RETURN_TYPES = ("IMAGE", "STRING", "FLOAT")
     RETURN_NAMES = ("visualization", "report", "impact_score")
     FUNCTION = "compare"
-    CATEGORY = "Anima/CrossAttn"
+    CATEGORY = "Anima/Diagnostics"
     OUTPUT_NODE = True
 
     def compare(self, image_a, image_b, layout="triptych", auto_gain=True, gain=4.0):

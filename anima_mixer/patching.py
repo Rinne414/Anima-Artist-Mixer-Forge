@@ -91,6 +91,9 @@ def reset_run_state(state):
     probe_stats = state.get("probe_stats")
     if isinstance(probe_stats, dict):
         probe_stats.clear()
+    probe_step_stats = state.get("probe_step_stats")
+    if isinstance(probe_step_stats, dict):
+        probe_step_stats.clear()
     probe_seen = state.get("_probe_seen_sigmas")
     if isinstance(probe_seen, set):
         probe_seen.clear()

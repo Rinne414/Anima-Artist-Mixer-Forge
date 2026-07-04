@@ -122,7 +122,7 @@ class AnimaArtistChainBuilder:
     RETURN_TYPES = ("STRING", "STRING")
     RETURN_NAMES = ("artist_chain", "preview")
     FUNCTION = "build"
-    CATEGORY = "Anima/CrossAttn"
+    CATEGORY = "Anima/Setup"
     OUTPUT_NODE = True
 
     def build(self, layout, artist_table, artist_1, weight_1, artist_2, weight_2, artist_3, weight_3,
@@ -169,7 +169,7 @@ class AnimaArtistChainPreview:
     RETURN_TYPES = ("STRING", "STRING")
     RETURN_NAMES = ("cleaned_chain", "report")
     FUNCTION = "preview"
-    CATEGORY = "Anima/CrossAttn"
+    CATEGORY = "Anima/Diagnostics"
     OUTPUT_NODE = True
 
     def preview(self, artist_chain, num_blocks=DEFAULT_NUM_BLOCKS):
@@ -219,7 +219,7 @@ class AnimaArtistSimpleOptions:
     RETURN_TYPES = ("ANIMA_OPTS",)
     RETURN_NAMES = ("advanced_options",)
     FUNCTION = "build"
-    CATEGORY = "Anima/CrossAttn"
+    CATEGORY = "Anima/Setup"
 
     def build(self, normalize_weights, layer_mode, start_percent, end_percent,
               custom_layer_filter="", compatibility_mode=False):
@@ -515,7 +515,7 @@ class AnimaArtistOptions:
     RETURN_TYPES = ("ANIMA_OPTS",)
     RETURN_NAMES = ("advanced_options",)
     FUNCTION = "build"
-    CATEGORY = "Anima/CrossAttn"
+    CATEGORY = "Anima/Setup"
 
     def build(self, start_block, end_block, start_percent, end_percent, normalize_weights,
               artist_ema_alpha=0.0, lowrank_k=1, artist_static_capture=False,
@@ -631,7 +631,7 @@ class AnimaArtistPreset:
     RETURN_TYPES = ("ANIMA_PRESET", "ANIMA_OPTS", "STRING")
     RETURN_NAMES = ("preset", "advanced_options", "summary")
     FUNCTION = "build"
-    CATEGORY = "Anima/CrossAttn"
+    CATEGORY = "Anima/Setup"
 
     def build(self, preset, intensity, normalize_weights, layer_mode, custom_layer_filter):
         payload = build_preset_payload(
@@ -738,7 +738,7 @@ class AnimaArtistStarter:
     RETURN_TYPES = ("STRING", "ANIMA_PRESET", "ANIMA_OPTS", "STRING")
     RETURN_NAMES = ("artist_chain", "preset", "advanced_options", "guide")
     FUNCTION = "build"
-    CATEGORY = "Anima/CrossAttn"
+    CATEGORY = "Anima/Basic"
     OUTPUT_NODE = True
 
     def build(self, recipe, artist_table, layout, intensity,
@@ -833,7 +833,7 @@ class AnimaArtistInspector:
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("report",)
     FUNCTION = "inspect"
-    CATEGORY = "Anima/CrossAttn"
+    CATEGORY = "Anima/Diagnostics"
     OUTPUT_NODE = True
 
     def inspect(self, artist_pack, combine_mode=COMBINE_OUTPUT_AVG,
@@ -1049,7 +1049,7 @@ class AnimaArtistRecipeSave:
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("recipe_json",)
     FUNCTION = "save"
-    CATEGORY = "Anima/CrossAttn"
+    CATEGORY = "Anima/Recipes"
     OUTPUT_NODE = True
 
     def save(self, artist_chain, combine_mode, fusion_mode, strength,
@@ -1084,7 +1084,7 @@ class AnimaArtistRecipeLoad:
     RETURN_TYPES = ("STRING", "ANIMA_PRESET", "ANIMA_OPTS", "STRING")
     RETURN_NAMES = ("artist_chain", "preset", "advanced_options", "summary")
     FUNCTION = "load"
-    CATEGORY = "Anima/CrossAttn"
+    CATEGORY = "Anima/Recipes"
     OUTPUT_NODE = True
 
     def load(self, recipe_json):
