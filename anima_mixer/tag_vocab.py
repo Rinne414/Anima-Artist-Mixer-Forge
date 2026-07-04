@@ -35,14 +35,16 @@ LOW_POST_COUNT = 50
 _VOCAB_CACHE = None
 
 
-def normalize_tag(text):
+def normalize_tag(text, strip_at=True):
     """Prompt-style artist entry -> Danbooru tag form.
 
-    Strips the Anima ``@`` marker and backslash escapes, converts full-width
-    parentheses, lowercases, and joins whitespace runs with underscores.
+    Strips the Anima ``@`` marker (unless ``strip_at`` is False, used by the
+    lookup fallback for tags that literally start with ``@``) and backslash
+    escapes, converts full-width parentheses, lowercases, and joins
+    whitespace runs with underscores.
     """
     s = str(text or "").strip().lower()
-    if s.startswith("@"):
+    if strip_at and s.startswith("@"):
         s = s[1:]
     s = s.replace("\\(", "(").replace("\\)", ")")
     s = s.replace("（", "(").replace("）", ")")
@@ -65,7 +67,10 @@ def load_vocab():
     tags, aliases = {}, {}
     try:
         with gzip.open(DATA_PATH, "rt", encoding="utf-8", newline="") as fh:
-            for row in csv.reader(line for line in fh if not line.startswith("#")):
+            # Skip only the "# "-prefixed provenance header: real tag names
+            # can start with a bare '#' (e.g. the artist tag '#b7282e') but
+            # never with "# " (Danbooru tags cannot contain spaces).
+            for row in csv.reader(line for line in fh if not line.startswith("# ")):
                 if len(row) < 3:
                     continue
                 name = row[0]
@@ -108,18 +113,26 @@ def lookup(name):
     if tags is None or aliases is None:
         return {"status": "unavailable", "canonical": None,
                 "category": None, "count": None}
-    tag = normalize_tag(name)
-    hit = tags.get(tag)
-    if hit is not None:
-        status = "artist" if hit[0] == ARTIST_CATEGORY else "other_category"
-        return {"status": status, "canonical": tag,
-                "category": hit[0], "count": hit[1]}
-    canonical = aliases.get(tag)
-    if canonical is not None:
-        hit = tags.get(canonical)
+    # Primary form strips the Anima '@' marker; a handful of real Danbooru
+    # tags literally start with '@' (e.g. the artist '@shun'), so fall back
+    # to the un-stripped form when the primary misses.
+    candidates = [normalize_tag(name)]
+    if str(name or "").strip().startswith("@"):
+        literal = normalize_tag(name, strip_at=False)
+        if literal not in candidates:
+            candidates.append(literal)
+    for tag in candidates:
+        hit = tags.get(tag)
         if hit is not None:
-            return {"status": "alias", "canonical": canonical,
+            status = "artist" if hit[0] == ARTIST_CATEGORY else "other_category"
+            return {"status": status, "canonical": tag,
                     "category": hit[0], "count": hit[1]}
+        canonical = aliases.get(tag)
+        if canonical is not None:
+            hit = tags.get(canonical)
+            if hit is not None:
+                return {"status": "alias", "canonical": canonical,
+                        "category": hit[0], "count": hit[1]}
     return {"status": "not_found", "canonical": None,
             "category": None, "count": None}
 

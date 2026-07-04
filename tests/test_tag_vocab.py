@@ -67,6 +67,14 @@ class LookupWithInjectedVocabTests(unittest.TestCase):
     def test_not_found(self):
         self.assertEqual(tag_vocab.lookup("zzqqx9999")["status"], "not_found")
 
+    def test_literal_at_prefixed_tag_found_via_fallback(self):
+        # A handful of real Danbooru tags start with '@'; the Anima marker
+        # strip must not hide them (review finding, 2026-07-05).
+        tag_vocab._VOCAB_CACHE[0]["@shun"] = (1, 90)
+        res = tag_vocab.lookup("@shun")
+        self.assertEqual(res["status"], "artist")
+        self.assertEqual(res["canonical"], "@shun")
+
     def test_describe_lines(self):
         self.assertIn("known artist tag", tag_vocab.describe("wlop"))
         self.assertIn("365", tag_vocab.describe("wlop"))
@@ -119,6 +127,11 @@ class BundledFileSmokeTests(unittest.TestCase):
         self.assertEqual(tag_vocab.lookup("wlop")["status"], "artist")
         self.assertEqual(tag_vocab.lookup("hatsune_miku")["category"], 4)
         self.assertEqual(tag_vocab.lookup("zzqqxnotanartist9999")["status"], "not_found")
+        # '#'-prefixed tags must survive the provenance-header filter and
+        # '@'-prefixed tags must be reachable via the literal fallback
+        # (review findings, 2026-07-05).
+        self.assertEqual(tag_vocab.lookup("#b7282e")["status"], "artist")
+        self.assertEqual(tag_vocab.lookup("@shun")["status"], "artist")
 
 
 class NodeIntegrationTests(unittest.TestCase):
