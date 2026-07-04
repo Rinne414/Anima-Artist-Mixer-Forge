@@ -1,7 +1,9 @@
 """UI helper nodes: builder, preview, options, presets, starter, inspector, recipes."""
 
+from . import tag_vocab
 from .chain_tools import (
     build_artist_chain_from_rows,
+    chain_artist_names,
     format_artist_block_map,
     format_artist_chain_preview,
     parse_builder_artist_table,
@@ -174,6 +176,9 @@ class AnimaArtistChainPreview:
 
     def preview(self, artist_chain, num_blocks=DEFAULT_NUM_BLOCKS):
         cleaned, report = format_artist_chain_preview(artist_chain, int(num_blocks))
+        names = [n for n in chain_artist_names(split_artist_chain(artist_chain)) if n]
+        if names:
+            report = report + "\n\n" + "\n".join(tag_vocab.report_lines(names))
         return {"ui": {"text": [report]}, "result": (cleaned, report)}
 
 

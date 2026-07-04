@@ -24,6 +24,23 @@ from .parsing import (
 )
 
 
+def chain_artist_names(parts):
+    """One clean artist name per chain part (None when it parses to no artist).
+
+    Parses each part individually so the result stays index-aligned with
+    ``parts`` even when an entry (e.g. a decorative bare ``::``) reduces to
+    nothing — whole-list parse_artist_entries silently drops those.
+    """
+    names = []
+    for part in parts:
+        stripped, _ = parse_artist_timing_routes([part])
+        stripped, _ = parse_artist_layer_routes(stripped)
+        entries = parse_artist_entries(stripped)
+        name = str(entries[0][0]).strip() if entries else ""
+        names.append(name or None)
+    return names
+
+
 def format_route_timing(label, timing):
     if timing is None:
         return label

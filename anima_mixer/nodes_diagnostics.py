@@ -21,13 +21,10 @@ import logging
 import torch
 import torch.nn.functional as F
 
+from . import tag_vocab
+from .chain_tools import chain_artist_names
 from .constants import MAX_ARTISTS
-from .parsing import (
-    parse_artist_entries,
-    parse_artist_layer_routes,
-    parse_artist_timing_routes,
-    split_artist_chain,
-)
+from .parsing import split_artist_chain
 from .patching import extract_conditioning
 
 logger = logging.getLogger(__name__)
@@ -162,6 +159,9 @@ class AnimaArtistTagCheck:
                 f"  [DUPLICATE] '{entries[i]['label']}' and '{entries[j]['label']}' "
                 "encode almost identically; mixing them adds no second style."
             )
+        lines.append("")
+        lines.extend(tag_vocab.report_lines([e["label"] for e in entries]))
+        lines.append("")
         lines.append(
             "  legend: [NO-OP] encodes identically to the base prompt; "
             "[DUPLICATE] two entries carry the same style vector (repeat or "
@@ -191,29 +191,12 @@ def sanitize_label(text):
     return label[:48]
 
 
-def _chain_names(parts):
-    """One clean artist name per part (None when the part parses to no artist).
-
-    Parses each part individually so the result stays index-aligned with
-    ``parts`` even when an entry (e.g. a decorative bare ``::``) reduces to
-    nothing — whole-list parse_artist_entries silently drops those.
-    """
-    names = []
-    for part in parts:
-        stripped, _ = parse_artist_timing_routes([part])
-        stripped, _ = parse_artist_layer_routes(stripped)
-        entries = parse_artist_entries(stripped)
-        name = str(entries[0][0]).strip() if entries else ""
-        names.append(name or None)
-    return names
-
-
 def build_variants(artist_chain, mode, include_no_mixer, include_full_mix):
     """Return (chains, labels, report) for one A/B comparison series."""
     all_parts = split_artist_chain(artist_chain)
     warnings = []
     parts, names = [], []
-    for part, name in zip(all_parts, _chain_names(all_parts)):
+    for part, name in zip(all_parts, chain_artist_names(all_parts)):
         if name is None:
             warnings.append(f"skipped non-artist entry {part!r}.")
         else:
