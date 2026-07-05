@@ -391,7 +391,7 @@
         "Node name for S&R": "Note"
       },
       "widgets_values": [
-        "Anima Artist Mixer Forge - quick start\n\n1. Pick your Anima files in the three loaders on the left\n   (Anima UNET / qwen_3_06b_base CLIP with type stable_diffusion / qwen_image_vae).\n2. Type your artists (comma separated) and your prompt in the big node.\n   Do not repeat the artist names inside the prompt.\n3. Queue. With the bundled seed and preset=balanced this graph\n   reproduces the template thumbnail exactly.\n\nNext steps: preset=strong_style for more style, the 02 template for the\nmulti-node preset route, and the Diagnostics nodes to verify each artist."
+        "Anima Artist Mixer Forge - quick start\n\n1. Pick your Anima files in the three loaders on the left\n   (Anima UNET / qwen_3_06b_base CLIP with type stable_diffusion / qwen_image_vae).\n2. Type your artists (comma separated) and your prompt in the big node.\n   Do not repeat the artist names inside the prompt.\n3. Queue. With the bundled seed and preset=balanced this graph\n   reproduces the template thumbnail.\n\nNext steps: preset=strong_style for more style, the 02 template for the\nmulti-node preset route, and the Diagnostics nodes to verify each artist."
       ]
     }
   ],

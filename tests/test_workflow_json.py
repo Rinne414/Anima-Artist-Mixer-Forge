@@ -162,6 +162,22 @@ class BundledWorkflowJsonTest(unittest.TestCase):
                         f"{path.name}: link {link_id} target node {dst} does not exist",
                     )
 
+    def test_preset_sample_template_matches_root_sample(self):
+        # workflow/02_preset_sample.json is the template-browser copy of the
+        # root "sample workflow.json" (the browser only scans top-level
+        # workflow/*.json). Pin them equal so an edit to one cannot silently
+        # leave template users and README users on different graphs.
+        root = Path(REPO_ROOT)
+        with open(root / "sample workflow.json", encoding="utf-8") as fh:
+            original = json.load(fh)
+        with open(root / "workflow" / "02_preset_sample.json", encoding="utf-8") as fh:
+            copy = json.load(fh)
+        self.assertEqual(
+            original, copy,
+            "workflow/02_preset_sample.json drifted from 'sample workflow.json' — "
+            "update both together",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
