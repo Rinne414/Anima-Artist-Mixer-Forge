@@ -57,8 +57,8 @@ The current release line (v26; Forge releases start at v27) keeps the original c
 - [Layer role workflow](workflow/artist-layer-role-routing.json) — character / clothing / background routing example
 - [Full documentation](docs/USAGE.md) — usage, parameters, modes, stabilizers, performance tips
 - [Changelog](CHANGELOG.md) — version history
-- [Issues](https://github.com/peter119lee/Anima-Artist-Mixer-Forge/issues) — bug reports, feature requests
-- [Discussions](https://github.com/peter119lee/Anima-Artist-Mixer-Forge/discussions) — usage questions, results sharing
+- [Issues](https://github.com/Rinne414/Anima-Artist-Mixer-Forge/issues) — bug reports, feature requests
+- [Discussions](https://github.com/Rinne414/Anima-Artist-Mixer-Forge/discussions) — usage questions, results sharing
 
 ## Installation
 
@@ -71,7 +71,7 @@ comfy node registry-install anima-artist-mixer-forge
 Or clone into your ComfyUI `custom_nodes` directory:
 
 ```
-git clone https://github.com/peter119lee/Anima-Artist-Mixer-Forge
+git clone https://github.com/Rinne414/Anima-Artist-Mixer-Forge
 ```
 
 Restart ComfyUI. No extra dependencies.

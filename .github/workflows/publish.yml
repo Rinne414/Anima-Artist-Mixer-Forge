@@ -11,9 +11,12 @@ on:
 jobs:
   publish-node:
     name: Publish Custom Node to Registry
-    # Forks have no registry token and must not publish; only the forge
-    # repo (or an explicit manual dispatch) runs this job.
-    if: github.repository == 'peter119lee/Anima-Artist-Mixer-Forge' || github.event_name == 'workflow_dispatch'
+    # Forks have no registry token and must not publish; only the canonical
+    # forge repo (or an explicit manual dispatch) runs this job. Checked via
+    # the fork flag rather than a hardcoded slug so an account or repo
+    # rename cannot silently skip publishing again (2026-07-17: the
+    # peter119lee -> Rinne414 rename did exactly that).
+    if: github.event.repository.fork == false || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       issues: write
