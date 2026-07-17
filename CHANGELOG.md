@@ -7,10 +7,11 @@ sampling-path changes — renders are identical to v27.5.0.
 
 - `AnimaArtistProbeReport` gains a `suggested_chain` output: weights
   that would equalize the measured per-artist influence (w ~ 1/m,
-  averaged to 1.0, clamped to 0.3-2.0), with the original `@layers` /
-  `%timing` routes preserved. Wire it straight back into
-  `AnimaArtistPack.artist_chain`. Immeasurable (~zero influence)
-  artists are pinned at the cap with a dead-tag warning.
+  correction ratios clamped to 3x, normalized to SUM 1.0 so the
+  explicit weights keep a normalized chain's total strength), with the
+  original `@layers` / `%timing` routes preserved. Wire it straight
+  back into `AnimaArtistPack.artist_chain`. Immeasurable (~zero
+  influence) artists get the max ratio plus a dead-tag warning.
 - New `AnimaArtistContactSheet` node: collects the whole ABVariants
   fan-out (images + labels) in one queue and returns a single labeled
   comparison grid, so the baseline / solo / full-mix series is

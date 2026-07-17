@@ -393,6 +393,11 @@ class AnimaArtistProbeReport:
                 "AnimaArtistPack.artist_chain):"
             )
             lines.append(f"  {suggested_chain}")
+            lines.append(
+                "  (explicit ::weights bypass normalize_weights; the "
+                "suggestion sums to ~1.0 so the total strength matches a "
+                "normalized chain)"
+            )
             lines.extend(notes)
 
         curve_lines = render_step_curves(state.get("probe_step_stats"), labels)

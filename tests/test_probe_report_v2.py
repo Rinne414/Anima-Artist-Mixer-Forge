@@ -86,24 +86,30 @@ class StepCurveTests(unittest.TestCase):
 
 
 class SuggestWeightTests(unittest.TestCase):
-    def test_equal_influence_suggests_unit_weights(self):
+    def test_equal_influence_splits_evenly(self):
         out = suggest_equalizing_weights([1.5, 1.5, 1.5])
-        self.assertEqual([w for w, _ in out], [1.0, 1.0, 1.0])
+        self.assertEqual([w for w, _ in out], [0.33, 0.33, 0.33])
         self.assertTrue(all(status == "ok" for _, status in out))
 
-    def test_dominant_artist_gets_lower_weight(self):
-        # w_i ~ 1/m_i, normalized so measurable weights average 1.0.
+    def test_dominant_artist_gets_lower_share(self):
+        # w ~ 1/m, normalized to SUM 1.0 (explicit weights bypass runtime
+        # normalization, so the sum sets the total injection strength).
         out = suggest_equalizing_weights([1.5, 0.5])
-        self.assertEqual([w for w, _ in out], [0.5, 1.5])
+        self.assertEqual([w for w, _ in out], [0.25, 0.75])
 
-    def test_extreme_imbalance_is_clamped(self):
+    def test_extreme_imbalance_ratio_clamped(self):
         out = suggest_equalizing_weights([50.0, 1.0])
-        self.assertEqual(out[0], (0.3, "clamped"))
-        self.assertLessEqual(out[1][0], 2.0)
+        self.assertEqual(out[0], (0.15, "clamped"))
+        self.assertEqual(out[1], (0.85, "ok"))
+
+    def test_suggested_weights_sum_to_one(self):
+        for totals in ([1.5, 0.5], [1.0, 2.0, 3.0], [50.0, 1.0]):
+            out = suggest_equalizing_weights(totals)
+            self.assertAlmostEqual(sum(w for w, _ in out), 1.0, places=1)
 
     def test_zero_influence_marked_immeasurable(self):
         out = suggest_equalizing_weights([1.0, 0.0, 1.0])
-        self.assertEqual(out[1], (2.0, "immeasurable"))
+        self.assertEqual(out[1], (0.6, "immeasurable"))
         self.assertEqual(out[0][0], out[2][0])
 
     def test_single_artist_returns_none(self):
@@ -162,12 +168,12 @@ class ProbeReportV2Tests(unittest.TestCase):
         self.assertNotIn("per-step influence", report)
 
     def test_report_emits_suggested_rebalance_chain(self):
-        # totals: strong 1.5 vs weak 0.5 -> inverse weights 0.5 / 1.5.
+        # totals: strong 1.5 vs weak 0.5 -> sum-1.0 weights 0.25 / 0.75.
         _registry_store("suggest-basic", self._fake_state())
         out = AnimaArtistProbeReport().report("suggest-basic")
         report, chain = out["result"]
         self.assertIn("suggested rebalance", report)
-        self.assertEqual(chain, "0.5::strong_artist::, 1.5::weak_artist::")
+        self.assertEqual(chain, "0.25::strong_artist::, 0.75::weak_artist::")
 
     def test_suggested_chain_preserves_routes(self):
         state = self._fake_state()
@@ -178,7 +184,7 @@ class ProbeReportV2Tests(unittest.TestCase):
         chain = out["result"][1]
         self.assertEqual(
             chain,
-            "0.5::strong_artist@9-15::, 1.5::weak_artist%0.0-0.5~0.1::",
+            "0.25::strong_artist@9-15::, 0.75::weak_artist%0.0-0.5~0.1::",
         )
 
     def test_no_data_returns_empty_chain(self):

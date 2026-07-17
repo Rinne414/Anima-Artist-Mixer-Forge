@@ -48,6 +48,7 @@ TAG_SIM_MAX_PAIRS = 10    # report cap; pairs print sorted by similarity
 
 CONTACT_MARGIN = 4        # px between contact-sheet cells
 CONTACT_LABEL_H = 26      # px label strip above each cell
+CONTACT_MAX_CELLS = 64    # grid cap; larger fan-outs are truncated with a warning
 
 IMPACT_CHANGE_THRESHOLD = 0.04   # per-pixel mean-abs diff counted as "changed"
 IMPACT_AUTO_GAIN_MAX = 10000.0
@@ -606,7 +607,14 @@ class AnimaArtistContactSheet:
                 t = t.unsqueeze(0)
             base_label = labels[i] if i < len(labels) else f"image {i + 1}"
             for k in range(t.shape[0]):
-                arr = (t[k].detach().cpu().clamp(0, 1) * 255).to(torch.uint8).numpy()
+                frame = t[k]
+                if frame.dim() != 3 or frame.shape[0] < 1 or frame.shape[1] < 1:
+                    continue  # skip degenerate frames instead of killing the queue
+                if frame.shape[-1] == 1:
+                    frame = frame.repeat(1, 1, 3)
+                if frame.shape[-1] < 3:
+                    continue
+                arr = (frame.detach().cpu().clamp(0, 1) * 255).to(torch.uint8).numpy()
                 pil = Image.fromarray(arr[..., :3], "RGB")
                 scale = cell_width / pil.width
                 pil = pil.resize(
@@ -616,6 +624,12 @@ class AnimaArtistContactSheet:
                 cells.append((pil, label))
         if not cells:
             raise ValueError("[AnimaArtistContactSheet] no images to compose.")
+        if len(cells) > CONTACT_MAX_CELLS:
+            logger.warning(
+                "[AnimaArtistContactSheet] %d cells truncated to %d",
+                len(cells), CONTACT_MAX_CELLS,
+            )
+            cells = cells[:CONTACT_MAX_CELLS]
 
         n = len(cells)
         cols = columns if columns > 0 else max(1, math.ceil(math.sqrt(n)))

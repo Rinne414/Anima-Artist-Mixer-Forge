@@ -25,21 +25,23 @@ def contribution_shares(scores):
     return totals, [total / denom for total in totals]
 
 
-SUGGEST_WEIGHT_MIN = 0.3
-SUGGEST_WEIGHT_MAX = 2.0
+SUGGEST_RATIO_CAP = 3.0
 
 
-def suggest_equalizing_weights(totals, w_min=SUGGEST_WEIGHT_MIN, w_max=SUGGEST_WEIGHT_MAX):
+def suggest_equalizing_weights(totals, ratio_cap=SUGGEST_RATIO_CAP):
     """Per-artist weights that would equalize the measured influence.
 
-    The probe measures unweighted per-artist delta strength ``m_i``, and the
+    The probe measures unweighted per-artist delta strength ``m_i`` and the
     mixed contribution scales as ``w_i * m_i``, so ``w_i ~ 1/m_i`` levels the
-    split. Weights are normalized so the measurable ones average 1.0, rounded
-    to 2 decimals and clamped to [w_min, w_max].
+    split. The weights are meant to be emitted as explicit ``::w::`` values,
+    which bypass runtime normalization — so they are normalized to SUM to
+    1.0, keeping the total injection strength of a normalized chain instead
+    of multiplying it by the artist count. Correction ratios are clamped to
+    [1/ratio_cap, ratio_cap] around the mean as a measurement-noise guard;
+    immeasurable (~zero influence) artists get the max ratio.
 
     Returns a list of ``(weight, status)`` with status in {"ok", "clamped",
-    "immeasurable"} (immeasurable = ~zero influence, weight pinned at w_max),
-    or None when fewer than two artists were measurable.
+    "immeasurable"}, or None when fewer than two artists are measurable.
     """
     if len(totals) < 2:
         return None
@@ -53,17 +55,20 @@ def suggest_equalizing_weights(totals, w_min=SUGGEST_WEIGHT_MIN, w_max=SUGGEST_W
     finite = [v for v in inverses if v is not None]
     if len(finite) < 2:
         return None
-    scale = len(finite) / sum(finite)
-    out = []
+    mean_inv = sum(finite) / len(finite)
+    lo, hi = 1.0 / ratio_cap, ratio_cap
+    ratios, statuses = [], []
     for inv in inverses:
         if inv is None:
-            out.append((w_max, "immeasurable"))
+            ratios.append(hi)
+            statuses.append("immeasurable")
             continue
-        raw = inv * scale
-        clamped = min(max(raw, w_min), w_max)
-        status = "ok" if abs(clamped - raw) < 1e-9 else "clamped"
-        out.append((round(clamped, 2), status))
-    return out
+        ratio = inv / mean_inv
+        clamped = min(max(ratio, lo), hi)
+        ratios.append(clamped)
+        statuses.append("ok" if abs(clamped - ratio) < 1e-9 else "clamped")
+    denom = sum(ratios)
+    return [(round(r / denom, 2), s) for r, s in zip(ratios, statuses)]
 
 
 def share_verdict(share, artist_count):
