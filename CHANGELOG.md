@@ -1,5 +1,21 @@
 # Changelog
 
+## v27.6.1 (2026-07-17)
+
+Two new one-click templates so the v27.6 diagnostics need zero manual
+wiring (Workflow -> Browse Templates):
+
+- **03_compare_artists** - type your artists, queue once: a same-seed
+  series (no-mixer baseline / each artist solo / full mix) renders and
+  lands as ONE labeled contact-sheet image. Thumbnail = the template's
+  real output.
+- **04_probe_autobalance** - one queue: the Layer Probe measures each
+  artist's real influence during a base render, the Probe Report's
+  `suggested_chain` feeds a second Pack, and the second render is the
+  auto-rebalanced mix.
+- CI installs numpy (needed by the contact sheet's PIL-to-tensor
+  conversion). No node behavior changed.
+
 ## v27.6.0 (2026-07-17)
 
 Diagnostics close the loop: measure, see, and fix in one queue. No

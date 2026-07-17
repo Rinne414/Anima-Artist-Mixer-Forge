@@ -1,0 +1,768 @@
+{
+  "id": "c0mparea-rtis-ts03-0000-000000000003",
+  "revision": 0,
+  "last_node_id": 15,
+  "last_link_id": 18,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "UNETLoader",
+      "pos": [
+        40,
+        300
+      ],
+      "size": [
+        310,
+        82
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            1
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "UNETLoader",
+        "cnr_id": "comfy-core"
+      },
+      "widgets_values": [
+        "anima-base-v1.0.safetensors",
+        "default"
+      ]
+    },
+    {
+      "id": 2,
+      "type": "CLIPLoader",
+      "pos": [
+        40,
+        440
+      ],
+      "size": [
+        310,
+        106
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            2,
+            3
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPLoader",
+        "cnr_id": "comfy-core"
+      },
+      "widgets_values": [
+        "qwen_3_06b_base.safetensors",
+        "stable_diffusion",
+        "default"
+      ]
+    },
+    {
+      "id": 3,
+      "type": "VAELoader",
+      "pos": [
+        40,
+        600
+      ],
+      "size": [
+        310,
+        58
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            15
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAELoader",
+        "cnr_id": "comfy-core"
+      },
+      "widgets_values": [
+        "qwen_image_vae.safetensors"
+      ]
+    },
+    {
+      "id": 4,
+      "type": "AnimaArtistABVariants",
+      "pos": [
+        400,
+        160
+      ],
+      "size": [
+        400,
+        260
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "artist_chain",
+          "type": "STRING",
+          "links": [
+            5
+          ]
+        },
+        {
+          "name": "label",
+          "type": "STRING",
+          "links": [
+            6,
+            7
+          ]
+        },
+        {
+          "name": "report",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AnimaArtistABVariants"
+      },
+      "widgets_values": [
+        "@uof, @kieed, @ciloranko",
+        "solo_each",
+        true,
+        true
+      ],
+      "title": "A/B Variants - your artists here"
+    },
+    {
+      "id": 5,
+      "type": "AnimaArtistPack",
+      "pos": [
+        400,
+        500
+      ],
+      "size": [
+        400,
+        300
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 2
+        },
+        {
+          "name": "artist_chain",
+          "type": "STRING",
+          "link": 5,
+          "widget": {
+            "name": "artist_chain"
+          }
+        }
+      ],
+      "outputs": [
+        {
+          "name": "artist_pack",
+          "type": "ANIMA_PACK",
+          "links": [
+            8
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AnimaArtistPack"
+      },
+      "widgets_values": [
+        "1girl, solo, masterpiece, best quality, upper body portrait, face visible, wearing a white blouse and navy jacket, looking at viewer, simple background"
+      ]
+    },
+    {
+      "id": 6,
+      "type": "AnimaArtistPreset",
+      "pos": [
+        400,
+        860
+      ],
+      "size": [
+        330,
+        214
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "preset",
+          "type": "ANIMA_PRESET",
+          "links": [
+            9
+          ]
+        },
+        {
+          "name": "advanced_options",
+          "type": "ANIMA_OPTS",
+          "links": null
+        },
+        {
+          "name": "summary",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AnimaArtistPreset"
+      },
+      "widgets_values": [
+        "balanced",
+        1,
+        true,
+        "auto",
+        ""
+      ]
+    },
+    {
+      "id": 7,
+      "type": "AnimaArtistPresetApply",
+      "pos": [
+        880,
+        300
+      ],
+      "size": [
+        310,
+        160
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 1
+        },
+        {
+          "name": "artist_pack",
+          "type": "ANIMA_PACK",
+          "link": 8
+        },
+        {
+          "name": "preset",
+          "type": "ANIMA_PRESET",
+          "link": 9,
+          "shape": 7
+        },
+        {
+          "name": "advanced_options",
+          "type": "ANIMA_OPTS",
+          "link": null,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "links": [
+            10
+          ]
+        },
+        {
+          "name": "base_prompt",
+          "type": "CONDITIONING",
+          "links": [
+            11
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AnimaArtistPresetApply"
+      },
+      "widgets_values": [
+        true,
+        false
+      ]
+    },
+    {
+      "id": 8,
+      "type": "CLIPTextEncode",
+      "pos": [
+        400,
+        1120
+      ],
+      "size": [
+        400,
+        120
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 3
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            12
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPTextEncode",
+        "cnr_id": "comfy-core"
+      },
+      "widgets_values": [
+        "nsfw, nude, naked, bare chest, cleavage, nipples, cropped head, head out of frame, lowres, worst quality, bad anatomy"
+      ],
+      "title": "CLIP Text Encode (Negative Prompt)"
+    },
+    {
+      "id": 9,
+      "type": "EmptyLatentImage",
+      "pos": [
+        880,
+        900
+      ],
+      "size": [
+        310,
+        106
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            13
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "EmptyLatentImage",
+        "cnr_id": "comfy-core"
+      },
+      "widgets_values": [
+        768,
+        512,
+        1
+      ]
+    },
+    {
+      "id": 10,
+      "type": "KSampler",
+      "pos": [
+        1240,
+        380
+      ],
+      "size": [
+        300,
+        474
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 10
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 11
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 12
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 13
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            14
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "KSampler",
+        "cnr_id": "comfy-core"
+      },
+      "widgets_values": [
+        20260704,
+        "fixed",
+        20,
+        5,
+        "er_sde",
+        "beta",
+        1
+      ]
+    },
+    {
+      "id": 11,
+      "type": "VAEDecode",
+      "pos": [
+        1590,
+        380
+      ],
+      "size": [
+        210,
+        48
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 14
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 15
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            16,
+            17
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAEDecode",
+        "cnr_id": "comfy-core"
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 12,
+      "type": "SaveImage",
+      "pos": [
+        1590,
+        520
+      ],
+      "size": [
+        320,
+        270
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 16
+        },
+        {
+          "name": "filename_prefix",
+          "type": "STRING",
+          "link": 7,
+          "widget": {
+            "name": "filename_prefix"
+          }
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "SaveImage",
+        "cnr_id": "comfy-core"
+      },
+      "widgets_values": [],
+      "title": "Save each variant"
+    },
+    {
+      "id": 13,
+      "type": "AnimaArtistContactSheet",
+      "pos": [
+        1860,
+        260
+      ],
+      "size": [
+        310,
+        130
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 17
+        },
+        {
+          "name": "labels",
+          "type": "STRING",
+          "link": 6,
+          "shape": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "sheet",
+          "type": "IMAGE",
+          "links": [
+            18
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "AnimaArtistContactSheet"
+      },
+      "widgets_values": [
+        384,
+        0
+      ]
+    },
+    {
+      "id": 14,
+      "type": "SaveImage",
+      "pos": [
+        2210,
+        260
+      ],
+      "size": [
+        400,
+        420
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 18
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "SaveImage",
+        "cnr_id": "comfy-core"
+      },
+      "widgets_values": [
+        "anima_contact_sheet"
+      ],
+      "title": "Save the contact sheet"
+    },
+    {
+      "id": 15,
+      "type": "Note",
+      "pos": [
+        880,
+        40
+      ],
+      "size": [
+        720,
+        190
+      ],
+      "flags": {},
+      "order": 15,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "Note",
+        "cnr_id": "comfy-core"
+      },
+      "widgets_values": [
+        "Which artist does what? - one queue, one picture\n\n1. Pick your Anima files in the three loaders.\n2. Type your artists (comma separated) in the A/B Variants node.\n3. Queue once. Same-seed series renders: no-mixer baseline, each\n   artist solo, and the full mix - then everything lands in ONE\n   labeled contact-sheet image (plus the individual files).\n\nModes: solo_each / leave_one_out / cumulative / off_vs_full."
+      ]
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      7,
+      0,
+      "MODEL"
+    ],
+    [
+      2,
+      2,
+      0,
+      5,
+      0,
+      "CLIP"
+    ],
+    [
+      3,
+      2,
+      0,
+      8,
+      0,
+      "CLIP"
+    ],
+    [
+      5,
+      4,
+      0,
+      5,
+      1,
+      "STRING"
+    ],
+    [
+      6,
+      4,
+      1,
+      13,
+      1,
+      "STRING"
+    ],
+    [
+      7,
+      4,
+      1,
+      12,
+      1,
+      "STRING"
+    ],
+    [
+      8,
+      5,
+      0,
+      7,
+      1,
+      "ANIMA_PACK"
+    ],
+    [
+      9,
+      6,
+      0,
+      7,
+      2,
+      "ANIMA_PRESET"
+    ],
+    [
+      10,
+      7,
+      0,
+      10,
+      0,
+      "MODEL"
+    ],
+    [
+      11,
+      7,
+      1,
+      10,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      12,
+      8,
+      0,
+      10,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      13,
+      9,
+      0,
+      10,
+      3,
+      "LATENT"
+    ],
+    [
+      14,
+      10,
+      0,
+      11,
+      0,
+      "LATENT"
+    ],
+    [
+      15,
+      3,
+      0,
+      11,
+      1,
+      "VAE"
+    ],
+    [
+      16,
+      11,
+      0,
+      12,
+      0,
+      "IMAGE"
+    ],
+    [
+      17,
+      11,
+      0,
+      13,
+      0,
+      "IMAGE"
+    ],
+    [
+      18,
+      13,
+      0,
+      14,
+      0,
+      "IMAGE"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.6,
+      "offset": [
+        40,
+        40
+      ]
+    }
+  },
+  "version": 0.4
+}

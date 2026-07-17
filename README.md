@@ -36,7 +36,11 @@ box, and switch `preset` to `strong_style` when you want more style.
 
 The other templates in the browser: **02_preset_sample** is the multi-node
 preset route (`AnimaArtistPack -> AnimaArtistPresetApply`) you graduate to
-when you need per-artist weights and routing, and
+when you need per-artist weights and routing;
+**03_compare_artists** renders a same-seed series (baseline / each artist
+solo / full mix) and returns it as ONE labeled contact-sheet image;
+**04_probe_autobalance** measures each artist's real influence and renders
+the auto-rebalanced mix in the same queue; and
 **artist-layer-role-routing** shows character / clothing / background
 layer routing.
 
