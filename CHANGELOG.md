@@ -19,8 +19,11 @@ sampling-path changes — renders are identical to v27.5.0.
   pairwise cosine between artist-minus-base delta vectors (raw
   conditioning cosines are all ~0.99 because every artist shares the
   base prompt — the deltas isolate the style directions). Flags
-  near-parallel pairs as likely redundant; worded as an encoder-level
-  heuristic, the solo A/B stays definitive.
+  near-identical pairs (>=0.98) as likely redundant; live calibration
+  showed distinct real artists measure 0.76-0.94 (a shared 'artist tag
+  present' component keeps the floor high), so everything below the
+  flag is presented as a relative ranking. The solo A/B stays
+  definitive.
 
 ## v27.5.0 (2026-07-17)
 

@@ -38,10 +38,12 @@ TAG_DUP_SIM = 0.999       # pairwise cosine above this => near-duplicate pair
 
 # Style-direction similarity (v27.6): cosine between artist-minus-base DELTA
 # vectors. Raw conditioning cosines are all ~0.99 because every artist shares
-# the base prompt; the deltas isolate the style directions. Heuristic bands
-# (initial values, checked against live encodes before release):
-TAG_SIM_VERY = 0.90       # deltas nearly parallel => likely redundant pair
-TAG_SIM_HIGH = 0.70       # strongly overlapping style directions
+# the base prompt; the deltas isolate the style directions. Live calibration
+# (2026-07-17, Anima encoder): DISTINCT real artists measure 0.76-0.94 —
+# a shared 'an artist tag is present' component keeps the floor high — while
+# an identical pair measures exactly 1.000. Only near-identical pairs get a
+# flag; everything else is a relative ranking, not a verdict.
+TAG_SIM_VERY = 0.98       # above distinct-artist range => likely redundant
 TAG_SIM_MAX_PAIRS = 10    # report cap; pairs print sorted by similarity
 
 CONTACT_MARGIN = 4        # px between contact-sheet cells
@@ -184,18 +186,14 @@ class AnimaArtistTagCheck:
             pairs.sort(key=lambda p: p[0], reverse=True)
             lines.append("")
             lines.append(
-                "style-direction similarity (cosine between artist-minus-base "
-                "delta vectors; encoder-level heuristic — high overlap suggests "
-                "redundant style directions, the solo A/B stays definitive):"
+                "style-direction similarity (cosine of artist-minus-base "
+                "deltas; live calibration: distinct artists measure "
+                "0.76-0.94, identical pairs 1.000 — read this as a relative "
+                "ranking, the solo A/B stays definitive):"
             )
             shown = pairs[:TAG_SIM_MAX_PAIRS]
             for cos_v, i, j in shown:
-                if cos_v >= TAG_SIM_VERY:
-                    flag = " [VERY SIMILAR]"
-                elif cos_v >= TAG_SIM_HIGH:
-                    flag = " [SIMILAR]"
-                else:
-                    flag = ""
+                flag = " [VERY SIMILAR]" if cos_v >= TAG_SIM_VERY else ""
                 lines.append(
                     f"  {cos_v:+.3f}{flag} "
                     f"'{entries[i]['label']}' <-> '{entries[j]['label']}'"
