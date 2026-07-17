@@ -32,8 +32,14 @@
   "5": {
     "class_type": "AnimaArtistPack",
     "inputs": {
-      "clip": ["2", 0],
-      "artist_chain": ["4", 0],
+      "clip": [
+        "2",
+        0
+      ],
+      "artist_chain": [
+        "4",
+        0
+      ],
       "base_prompt": "recent, full body idol stage portrait, blue and white frilly idol dress, bright stage lights, detailed background"
     }
   },
@@ -50,9 +56,18 @@
   "7": {
     "class_type": "AnimaArtistPresetApply",
     "inputs": {
-      "model": ["1", 0],
-      "artist_pack": ["5", 0],
-      "preset": ["6", 0],
+      "model": [
+        "1",
+        0
+      ],
+      "artist_pack": [
+        "5",
+        0
+      ],
+      "preset": [
+        "6",
+        0
+      ],
       "enabled": true,
       "apply_to_uncond": false
     }
@@ -61,7 +76,10 @@
     "class_type": "CLIPTextEncode",
     "inputs": {
       "text": "nsfw, nude, naked, bare chest, cleavage, nipples, cropped head, head out of frame, lowres, worst quality, bad anatomy",
-      "clip": ["2", 0]
+      "clip": [
+        "2",
+        0
+      ]
     }
   },
   "9": {
@@ -75,10 +93,22 @@
   "10": {
     "class_type": "KSampler",
     "inputs": {
-      "model": ["7", 0],
-      "positive": ["7", 1],
-      "negative": ["8", 0],
-      "latent_image": ["9", 0],
+      "model": [
+        "7",
+        0
+      ],
+      "positive": [
+        "7",
+        1
+      ],
+      "negative": [
+        "8",
+        0
+      ],
+      "latent_image": [
+        "9",
+        0
+      ],
       "seed": 66006006,
       "steps": 8,
       "cfg": 5.0,
@@ -90,21 +120,36 @@
   "11": {
     "class_type": "VAEDecode",
     "inputs": {
-      "samples": ["10", 0],
-      "vae": ["3", 0]
+      "samples": [
+        "10",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
     }
   },
   "12": {
     "class_type": "SaveImage",
     "inputs": {
-      "images": ["11", 0],
-      "filename_prefix": ["4", 1]
+      "images": [
+        "11",
+        0
+      ],
+      "filename_prefix": [
+        "4",
+        1
+      ]
     }
   },
   "13": {
     "class_type": "AnimaArtistPack",
     "inputs": {
-      "clip": ["2", 0],
+      "clip": [
+        "2",
+        0
+      ],
       "artist_chain": "",
       "base_prompt": "recent, full body idol stage portrait, blue and white frilly idol dress, bright stage lights, detailed background"
     }
@@ -112,9 +157,18 @@
   "14": {
     "class_type": "AnimaArtistPresetApply",
     "inputs": {
-      "model": ["1", 0],
-      "artist_pack": ["13", 0],
-      "preset": ["6", 0],
+      "model": [
+        "1",
+        0
+      ],
+      "artist_pack": [
+        "13",
+        0
+      ],
+      "preset": [
+        "6",
+        0
+      ],
       "enabled": true,
       "apply_to_uncond": false
     }
@@ -122,10 +176,22 @@
   "15": {
     "class_type": "KSampler",
     "inputs": {
-      "model": ["14", 0],
-      "positive": ["14", 1],
-      "negative": ["8", 0],
-      "latent_image": ["9", 0],
+      "model": [
+        "14",
+        0
+      ],
+      "positive": [
+        "14",
+        1
+      ],
+      "negative": [
+        "8",
+        0
+      ],
+      "latent_image": [
+        "9",
+        0
+      ],
       "seed": 66006006,
       "steps": 8,
       "cfg": 5.0,
@@ -137,15 +203,27 @@
   "16": {
     "class_type": "VAEDecode",
     "inputs": {
-      "samples": ["15", 0],
-      "vae": ["3", 0]
+      "samples": [
+        "15",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
     }
   },
   "17": {
     "class_type": "AnimaArtistImpactMap",
     "inputs": {
-      "image_a": ["16", 0],
-      "image_b": ["11", 0],
+      "image_a": [
+        "16",
+        0
+      ],
+      "image_b": [
+        "11",
+        0
+      ],
       "layout": "triptych",
       "auto_gain": true,
       "gain": 4.0
@@ -154,14 +232,20 @@
   "18": {
     "class_type": "SaveImage",
     "inputs": {
-      "images": ["17", 0],
+      "images": [
+        "17",
+        0
+      ],
       "filename_prefix": "anima_node_usage_07_impact"
     }
   },
   "19": {
     "class_type": "AnimaArtistPack",
     "inputs": {
-      "clip": ["2", 0],
+      "clip": [
+        "2",
+        0
+      ],
       "artist_chain": "@raisuta, @yuchi \\(salmon-1000\\)",
       "base_prompt": "recent, full body idol stage portrait, blue and white frilly idol dress, bright stage lights, detailed background"
     }
@@ -169,7 +253,35 @@
   "20": {
     "class_type": "AnimaArtistTagCheck",
     "inputs": {
-      "artist_pack": ["19", 0]
+      "artist_pack": [
+        "19",
+        0
+      ]
+    }
+  },
+  "21": {
+    "class_type": "AnimaArtistContactSheet",
+    "inputs": {
+      "images": [
+        "11",
+        0
+      ],
+      "labels": [
+        "4",
+        1
+      ],
+      "cell_width": 512,
+      "columns": 0
+    }
+  },
+  "22": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "images": [
+        "21",
+        0
+      ],
+      "filename_prefix": "anima_contact_sheet"
     }
   }
 }

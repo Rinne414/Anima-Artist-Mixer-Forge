@@ -6,13 +6,18 @@ import uuid
 import torch
 
 from .anchor import make_sigma_capture
-from .chain_tools import format_layer_span
+from .chain_tools import format_layer_span, format_weighted_artist_entry
 from .constants import (
     COMBINE_OUTPUT_AVG,
     FUSION_INTERPOLATE,
     STATIC_CAPTURE_K_DEFAULT,
 )
-from .probe_stats import contribution_shares, render_step_curves, share_verdict
+from .probe_stats import (
+    contribution_shares,
+    render_step_curves,
+    share_verdict,
+    suggest_equalizing_weights,
+)
 from .patching import (
     extract_conditioning,
     make_cross_attn_forward_patch,
@@ -42,6 +47,8 @@ def _registry_store(probe_id, state):
         "probe_num_blocks": state["probe_num_blocks"],
         "_probe_seen_sigmas": state["_probe_seen_sigmas"],
         "probe_step_stats": state.get("probe_step_stats"),
+        "probe_layer_route_texts": state.get("probe_layer_route_texts") or [],
+        "probe_timing_route_texts": state.get("probe_timing_route_texts") or [],
         # Lets the report skip the dominance tip when the run already
         # had the contribution balancer on.
         "contribution_balance": bool(state.get("contribution_balance", False)),
@@ -152,6 +159,8 @@ class AnimaArtistProbe:
         state["probe_stats"] = {}  # layer_idx -> [ [sum, count], ... ] per artist
         state["probe_step_stats"] = {}  # sigma_key -> [ [sum, count], ... ] per artist
         state["probe_labels"] = labels
+        state["probe_layer_route_texts"] = list(artist_pack.get("layer_routes") or [])
+        state["probe_timing_route_texts"] = list(artist_pack.get("timing_routes") or [])
         state["probe_num_blocks"] = num_blocks
         state["_probe_seen_sigmas"] = set()
         # Fallback step budget for the degenerate case where the sigma-capture
@@ -286,8 +295,8 @@ class AnimaArtistProbeReport:
             },
         }
 
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("report",)
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("report", "suggested_chain")
     FUNCTION = "report"
     CATEGORY = "Anima/Diagnostics"
     OUTPUT_NODE = True
@@ -306,7 +315,7 @@ class AnimaArtistProbeReport:
                 "through the sampler, connect its probe_id here, and connect "
                 "a post-sampler output (e.g. IMAGE) to trigger."
             )
-            return {"ui": {"text": [text]}, "result": (text,)}
+            return {"ui": {"text": [text]}, "result": (text, "")}
 
         stats = state.get("probe_stats") or {}
         labels = list(state.get("probe_labels") or [])
@@ -318,7 +327,7 @@ class AnimaArtistProbeReport:
                 "The probe is armed but no samples were recorded yet. "
                 "Run the sampler first (connect trigger to a post-sampler output)."
             )
-            return {"ui": {"text": [text]}, "result": (text,)}
+            return {"ui": {"text": [text]}, "result": (text, "")}
 
         n = len(labels)
         # scores[artist][layer] = mean relative delta
@@ -352,6 +361,40 @@ class AnimaArtistProbeReport:
                 "  tip: enable contribution_balance (Options node) or add the "
                 "Style Balance node to even artist strength before weighting"
             )
+
+        suggested_chain = ""
+        suggestion = suggest_equalizing_weights(totals)
+        if suggestion is not None:
+            layer_texts = state.get("probe_layer_route_texts") or []
+            timing_texts = state.get("probe_timing_route_texts") or []
+            entries, notes = [], []
+            for i, (label, (weight, status)) in enumerate(zip(labels, suggestion)):
+                entries.append(
+                    format_weighted_artist_entry(
+                        label,
+                        weight,
+                        layer_texts[i] if i < len(layer_texts) else "",
+                        timing_texts[i] if i < len(timing_texts) else "",
+                        explicit=True,
+                    )
+                )
+                if status == "immeasurable":
+                    notes.append(
+                        f"  note: '{label}' measured ~zero influence; weight pinned "
+                        f"at {weight} — likely a dead tag, confirm with a solo A/B"
+                    )
+                elif status == "clamped":
+                    notes.append(f"  note: '{label}' needed an out-of-range weight; clamped to {weight}")
+            suggested_chain = ", ".join(entries)
+            lines.append("")
+            lines.append(
+                "suggested rebalance (weights that equalize the measured "
+                "influence; wire the suggested_chain output into "
+                "AnimaArtistPack.artist_chain):"
+            )
+            lines.append(f"  {suggested_chain}")
+            lines.extend(notes)
+
         curve_lines = render_step_curves(state.get("probe_step_stats"), labels)
         if curve_lines:
             lines.append("")
@@ -392,4 +435,4 @@ class AnimaArtistProbeReport:
             ]
         )
         text = "\n".join(lines)
-        return {"ui": {"text": [text]}, "result": (text,)}
+        return {"ui": {"text": [text]}, "result": (text, suggested_chain)}

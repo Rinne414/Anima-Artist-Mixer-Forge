@@ -15,6 +15,7 @@ from .nodes_core import (
 )
 from .nodes_diagnostics import (
     AnimaArtistABVariants,
+    AnimaArtistContactSheet,
     AnimaArtistImpactMap,
     AnimaArtistTagCheck,
 )
@@ -51,6 +52,7 @@ NODE_CLASS_MAPPINGS = {
     "AnimaArtistTagCheck": AnimaArtistTagCheck,
     "AnimaArtistABVariants": AnimaArtistABVariants,
     "AnimaArtistImpactMap": AnimaArtistImpactMap,
+    "AnimaArtistContactSheet": AnimaArtistContactSheet,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -73,6 +75,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "AnimaArtistTagCheck": "Anima Artist Tag Check (Encoder)",
     "AnimaArtistABVariants": "Anima Artist A/B Variants",
     "AnimaArtistImpactMap": "Anima Artist Impact Map (A/B Diff)",
+    "AnimaArtistContactSheet": "Anima Artist Contact Sheet",
 }
 
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]

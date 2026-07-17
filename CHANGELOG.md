@@ -1,5 +1,27 @@
 # Changelog
 
+## v27.6.0 (2026-07-17)
+
+Diagnostics close the loop: measure, see, and fix in one queue. No
+sampling-path changes — renders are identical to v27.5.0.
+
+- `AnimaArtistProbeReport` gains a `suggested_chain` output: weights
+  that would equalize the measured per-artist influence (w ~ 1/m,
+  averaged to 1.0, clamped to 0.3-2.0), with the original `@layers` /
+  `%timing` routes preserved. Wire it straight back into
+  `AnimaArtistPack.artist_chain`. Immeasurable (~zero influence)
+  artists are pinned at the cap with a dead-tag warning.
+- New `AnimaArtistContactSheet` node: collects the whole ABVariants
+  fan-out (images + labels) in one queue and returns a single labeled
+  comparison grid, so the baseline / solo / full-mix series is
+  readable inside ComfyUI instead of scattered output files.
+- `AnimaArtistTagCheck` gains a style-direction similarity section:
+  pairwise cosine between artist-minus-base delta vectors (raw
+  conditioning cosines are all ~0.99 because every artist shares the
+  base prompt — the deltas isolate the style directions). Flags
+  near-parallel pairs as likely redundant; worded as an encoder-level
+  heuristic, the solo A/B stays definitive.
+
 ## v27.5.0 (2026-07-17)
 
 Performance and compat ports from upstream An1X3R/Anima-Artist-Mixer

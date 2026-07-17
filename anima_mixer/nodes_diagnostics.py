@@ -36,6 +36,17 @@ logger = logging.getLogger(__name__)
 TAG_NOOP_DIST = 1e-4      # shift vs base below this => entry adds ~nothing
 TAG_DUP_SIM = 0.999       # pairwise cosine above this => near-duplicate pair
 
+# Style-direction similarity (v27.6): cosine between artist-minus-base DELTA
+# vectors. Raw conditioning cosines are all ~0.99 because every artist shares
+# the base prompt; the deltas isolate the style directions. Heuristic bands
+# (initial values, checked against live encodes before release):
+TAG_SIM_VERY = 0.90       # deltas nearly parallel => likely redundant pair
+TAG_SIM_HIGH = 0.70       # strongly overlapping style directions
+TAG_SIM_MAX_PAIRS = 10    # report cap; pairs print sorted by similarity
+
+CONTACT_MARGIN = 4        # px between contact-sheet cells
+CONTACT_LABEL_H = 26      # px label strip above each cell
+
 IMPACT_CHANGE_THRESHOLD = 0.04   # per-pixel mean-abs diff counted as "changed"
 IMPACT_AUTO_GAIN_MAX = 10000.0
 # torch.quantile refuses tensors above 2**24 elements; subsample beyond this.
@@ -159,6 +170,38 @@ class AnimaArtistTagCheck:
                 f"  [DUPLICATE] '{entries[i]['label']}' and '{entries[j]['label']}' "
                 "encode almost identically; mixing them adds no second style."
             )
+        eligible = [
+            i for i, e in enumerate(entries)
+            if float((e["vec"] - base_vec).norm()) > 1e-6
+        ]
+        if len(eligible) >= 2:
+            deltas = {i: entries[i]["vec"] - base_vec for i in eligible}
+            pairs = []
+            for a_pos in range(len(eligible)):
+                for b_pos in range(a_pos + 1, len(eligible)):
+                    i, j = eligible[a_pos], eligible[b_pos]
+                    pairs.append((_cosine(deltas[i], deltas[j]), i, j))
+            pairs.sort(key=lambda p: p[0], reverse=True)
+            lines.append("")
+            lines.append(
+                "style-direction similarity (cosine between artist-minus-base "
+                "delta vectors; encoder-level heuristic — high overlap suggests "
+                "redundant style directions, the solo A/B stays definitive):"
+            )
+            shown = pairs[:TAG_SIM_MAX_PAIRS]
+            for cos_v, i, j in shown:
+                if cos_v >= TAG_SIM_VERY:
+                    flag = " [VERY SIMILAR]"
+                elif cos_v >= TAG_SIM_HIGH:
+                    flag = " [SIMILAR]"
+                else:
+                    flag = ""
+                lines.append(
+                    f"  {cos_v:+.3f}{flag} "
+                    f"'{entries[i]['label']}' <-> '{entries[j]['label']}'"
+                )
+            if len(pairs) > len(shown):
+                lines.append(f"  ... top {len(shown)} of {len(pairs)} pairs")
         lines.append("")
         lines.extend(tag_vocab.report_lines([e["label"] for e in entries]))
         lines.append("")
@@ -486,3 +529,118 @@ class AnimaArtistImpactMap:
             "ui": {"text": [report]},
             "result": (viz.clamp(0.0, 1.0), report, float(score)),
         }
+
+
+class AnimaArtistContactSheet:
+    """Compose the ABVariants fan-out into one labeled comparison grid.
+
+    ABVariants renders a same-seed series (baseline / solo / full mix), but
+    the results land as separate files. This node collects the whole list in
+    one queue (INPUT_IS_LIST) and returns a single grid image with a label
+    strip per cell, so the comparison is readable inside ComfyUI.
+    """
+
+    INPUT_IS_LIST = True
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "images": ("IMAGE", {
+                    "tooltip": (
+                        "The rendered variants (e.g. the VAE Decode output of "
+                        "an ABVariants fan-out). All list items are collected "
+                        "into one grid."
+                    ),
+                }),
+            },
+            "optional": {
+                "labels": ("STRING", {
+                    "forceInput": True,
+                    "tooltip": (
+                        "Per-image labels; wire AnimaArtistABVariants' label "
+                        "output here."
+                    ),
+                }),
+                "cell_width": ("INT", {
+                    "default": 512, "min": 64, "max": 2048, "step": 16,
+                    "tooltip": "Each cell is scaled to this width (aspect kept).",
+                }),
+                "columns": ("INT", {
+                    "default": 0, "min": 0, "max": 16, "step": 1,
+                    "tooltip": "Grid columns. 0 = automatic (near-square).",
+                }),
+            },
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("sheet",)
+    FUNCTION = "compose"
+    CATEGORY = "Anima/Diagnostics"
+
+    def compose(self, images, labels=None, cell_width=512, columns=0):
+        import math
+
+        import numpy as np
+        from PIL import Image, ImageDraw, ImageFont
+
+        # INPUT_IS_LIST wraps every input in a list, including widgets.
+        if isinstance(cell_width, (list, tuple)):
+            cell_width = cell_width[0] if cell_width else 512
+        if isinstance(columns, (list, tuple)):
+            columns = columns[0] if columns else 0
+        cell_width = max(16, int(cell_width))
+        columns = max(0, int(columns))
+        if not isinstance(images, (list, tuple)):
+            images = [images]
+        if labels is None:
+            labels = []
+        if not isinstance(labels, (list, tuple)):
+            labels = [labels]
+        labels = [str(x) for x in labels]
+
+        cells = []
+        for i, batch in enumerate(images):
+            if not torch.is_tensor(batch):
+                continue
+            t = batch
+            if t.dim() == 3:
+                t = t.unsqueeze(0)
+            base_label = labels[i] if i < len(labels) else f"image {i + 1}"
+            for k in range(t.shape[0]):
+                arr = (t[k].detach().cpu().clamp(0, 1) * 255).to(torch.uint8).numpy()
+                pil = Image.fromarray(arr[..., :3], "RGB")
+                scale = cell_width / pil.width
+                pil = pil.resize(
+                    (cell_width, max(1, round(pil.height * scale))), Image.LANCZOS,
+                )
+                label = base_label if t.shape[0] == 1 else f"{base_label} #{k + 1}"
+                cells.append((pil, label))
+        if not cells:
+            raise ValueError("[AnimaArtistContactSheet] no images to compose.")
+
+        n = len(cells)
+        cols = columns if columns > 0 else max(1, math.ceil(math.sqrt(n)))
+        cols = min(cols, n)
+        rows = math.ceil(n / cols)
+        cell_h = max(pil.height for pil, _ in cells)
+        m, lh = CONTACT_MARGIN, CONTACT_LABEL_H
+        width = m + cols * (cell_width + m)
+        height = m + rows * (cell_h + lh + m)
+        sheet = Image.new("RGB", (width, height), (24, 24, 24))
+        draw = ImageDraw.Draw(sheet)
+        try:
+            font = ImageFont.load_default(size=14)
+        except TypeError:  # Pillow < 10.1 has no size parameter
+            font = ImageFont.load_default()
+        for idx, (pil, label) in enumerate(cells):
+            row, col = divmod(idx, cols)
+            x = m + col * (cell_width + m)
+            y = m + row * (cell_h + lh + m)
+            draw.rectangle([x, y, x + cell_width - 1, y + lh - 1], fill=(42, 42, 42))
+            draw.text((x + 6, y + 6), label[:80], fill=(235, 235, 235), font=font)
+            off_x = x + (cell_width - pil.width) // 2
+            off_y = y + lh + (cell_h - pil.height) // 2
+            sheet.paste(pil, (off_x, off_y))
+        out = torch.from_numpy(np.asarray(sheet)).to(torch.float32) / 255.0
+        return (out.unsqueeze(0),)

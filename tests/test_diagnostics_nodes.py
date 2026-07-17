@@ -16,7 +16,10 @@ if REPO_ROOT not in sys.path:
 
 from anima_mixer import nodes_diagnostics as diag  # noqa: E402
 from anima_mixer.nodes_diagnostics import (  # noqa: E402
+    CONTACT_LABEL_H,
+    CONTACT_MARGIN,
     AnimaArtistABVariants,
+    AnimaArtistContactSheet,
     AnimaArtistImpactMap,
     AnimaArtistTagCheck,
     build_variants,
@@ -89,15 +92,11 @@ class TagCheckTests(unittest.TestCase):
         base = _unit(8, 0)
         near = base + 0.15 * _unit(8, 1)  # tiny angle from base
         far1, far2 = _unit(8, 2), _unit(8, 3)
-        report = self._report(
-            _pack(base, [near, far1, far2], labels=["subtle", "strong1", "strong2"])
-        )
+        report = self._report(_pack(base, [near, far1, far2], labels=["subtle", "strong1", "strong2"]))
         self.assertIn("[OK] subtle", report)
 
     def test_mixed_sequence_lengths_supported(self):
-        report = self._report(
-            _pack(_unit(8, 0), [_unit(8, 1), _unit(8, 2)], tokens_per_artist=[3, 9])
-        )
+        report = self._report(_pack(_unit(8, 0), [_unit(8, 1), _unit(8, 2)], tokens_per_artist=[3, 9]))
         self.assertIn("[OK] artist0", report)
 
     def test_empty_pack_reports_no_artists(self):
@@ -113,6 +112,82 @@ class TagCheckTests(unittest.TestCase):
     def test_bad_pack_type_raises(self):
         with self.assertRaises(ValueError):
             AnimaArtistTagCheck().check("not a pack")
+
+    def test_similarity_section_ranks_delta_directions(self):
+        # Deltas vs base: a1 = unit1, a2 = 0.9*unit1 + 0.1*unit2 (cos ~0.994
+        # -> VERY SIMILAR), a3 = unit3 (orthogonal to both).
+        base = _unit(8, 0)
+        a1 = base + _unit(8, 1)
+        a2 = base + 0.9 * _unit(8, 1) + 0.1 * _unit(8, 2)
+        a3 = base + _unit(8, 3)
+        report = self._report(_pack(base, [a1, a2, a3], labels=["a1", "a2", "a3"]))
+        self.assertIn("style-direction similarity", report)
+        self.assertIn("[VERY SIMILAR] 'a1' <-> 'a2'", report)
+        self.assertIn("'a1' <-> 'a3'", report)
+        self.assertNotIn("[VERY SIMILAR] 'a1' <-> 'a3'", report)
+
+    def test_similarity_skips_noop_deltas(self):
+        base = _unit(8, 0)
+        report = self._report(
+            _pack(base, [base.clone(), _unit(8, 1) + base, _unit(8, 2) + base], labels=["ghost", "s1", "s2"])
+        )
+        self.assertIn("style-direction similarity", report)
+        self.assertNotIn("'ghost' <->", report)
+        self.assertNotIn("<-> 'ghost'", report)
+
+    def test_similarity_absent_for_single_artist(self):
+        report = self._report(_pack(_unit(8, 0), [_unit(8, 1)], labels=["solo"]))
+        self.assertNotIn("style-direction similarity", report)
+
+
+class ContactSheetTests(unittest.TestCase):
+    def _compose(self, images, labels=None, cell_width=48, columns=0):
+        # INPUT_IS_LIST nodes receive widget values wrapped in lists.
+        out = AnimaArtistContactSheet().compose(
+            images=images,
+            labels=labels,
+            cell_width=[cell_width],
+            columns=[columns],
+        )
+        sheet = out[0]
+        self.assertEqual(sheet.dim(), 4)
+        self.assertEqual(sheet.shape[0], 1)
+        self.assertEqual(sheet.shape[3], 3)
+        self.assertGreaterEqual(float(sheet.min()), 0.0)
+        self.assertLessEqual(float(sheet.max()), 1.0)
+        return sheet
+
+    def test_grid_shape_five_cells(self):
+        images = [torch.rand(1, 32, 48, 3) for _ in range(5)]
+        labels = [f"v{i}" for i in range(5)]
+        sheet = self._compose(images, labels, cell_width=48)
+        # 5 cells -> 3 columns x 2 rows; cells stay 48x32 at cell_width=48.
+        m, lh = CONTACT_MARGIN, CONTACT_LABEL_H
+        self.assertEqual(sheet.shape[2], m + 3 * (48 + m))
+        self.assertEqual(sheet.shape[1], m + 2 * (32 + lh + m))
+
+    def test_batches_flatten_into_cells(self):
+        sheet = self._compose([torch.rand(2, 16, 16, 3)], ["mix"], cell_width=16)
+        m, lh = CONTACT_MARGIN, CONTACT_LABEL_H
+        self.assertEqual(sheet.shape[2], m + 2 * (16 + m))
+        self.assertEqual(sheet.shape[1], m + 1 * (16 + lh + m))
+
+    def test_mixed_aspect_ratios_letterboxed(self):
+        images = [torch.rand(1, 32, 48, 3), torch.rand(1, 64, 48, 3)]
+        sheet = self._compose(images, ["wide", "tall"], cell_width=48)
+        m, lh = CONTACT_MARGIN, CONTACT_LABEL_H
+        self.assertEqual(sheet.shape[2], m + 2 * (48 + m))
+        self.assertEqual(sheet.shape[1], m + 1 * (64 + lh + m))
+
+    def test_missing_labels_ok(self):
+        self._compose([torch.rand(1, 16, 16, 3)], labels=None, cell_width=16)
+
+    def test_forced_columns(self):
+        images = [torch.rand(1, 16, 16, 3) for _ in range(4)]
+        sheet = self._compose(images, None, cell_width=16, columns=4)
+        m, lh = CONTACT_MARGIN, CONTACT_LABEL_H
+        self.assertEqual(sheet.shape[2], m + 4 * (16 + m))
+        self.assertEqual(sheet.shape[1], m + 1 * (16 + lh + m))
 
     def test_missing_base_conditioning_raises(self):
         pack = _pack(_unit(8, 0), [_unit(8, 1)])

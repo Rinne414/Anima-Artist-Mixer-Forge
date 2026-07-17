@@ -22,6 +22,7 @@ from anima_mixer.probe_stats import (  # noqa: E402
     contribution_shares,
     render_step_curves,
     share_verdict,
+    suggest_equalizing_weights,
 )
 
 
@@ -84,6 +85,35 @@ class StepCurveTests(unittest.TestCase):
         self.assertTrue(any("b" in ln for ln in lines))
 
 
+class SuggestWeightTests(unittest.TestCase):
+    def test_equal_influence_suggests_unit_weights(self):
+        out = suggest_equalizing_weights([1.5, 1.5, 1.5])
+        self.assertEqual([w for w, _ in out], [1.0, 1.0, 1.0])
+        self.assertTrue(all(status == "ok" for _, status in out))
+
+    def test_dominant_artist_gets_lower_weight(self):
+        # w_i ~ 1/m_i, normalized so measurable weights average 1.0.
+        out = suggest_equalizing_weights([1.5, 0.5])
+        self.assertEqual([w for w, _ in out], [0.5, 1.5])
+
+    def test_extreme_imbalance_is_clamped(self):
+        out = suggest_equalizing_weights([50.0, 1.0])
+        self.assertEqual(out[0], (0.3, "clamped"))
+        self.assertLessEqual(out[1][0], 2.0)
+
+    def test_zero_influence_marked_immeasurable(self):
+        out = suggest_equalizing_weights([1.0, 0.0, 1.0])
+        self.assertEqual(out[1], (2.0, "immeasurable"))
+        self.assertEqual(out[0][0], out[2][0])
+
+    def test_single_artist_returns_none(self):
+        self.assertIsNone(suggest_equalizing_weights([1.0]))
+        self.assertIsNone(suggest_equalizing_weights([]))
+
+    def test_all_dead_returns_none(self):
+        self.assertIsNone(suggest_equalizing_weights([0.0, 0.0]))
+
+
 class ProbeReportV2Tests(unittest.TestCase):
     def _fake_state(self, with_steps=True):
         state = {
@@ -131,6 +161,30 @@ class ProbeReportV2Tests(unittest.TestCase):
         self.assertIn("contribution split", report)
         self.assertNotIn("per-step influence", report)
 
+    def test_report_emits_suggested_rebalance_chain(self):
+        # totals: strong 1.5 vs weak 0.5 -> inverse weights 0.5 / 1.5.
+        _registry_store("suggest-basic", self._fake_state())
+        out = AnimaArtistProbeReport().report("suggest-basic")
+        report, chain = out["result"]
+        self.assertIn("suggested rebalance", report)
+        self.assertEqual(chain, "0.5::strong_artist::, 1.5::weak_artist::")
+
+    def test_suggested_chain_preserves_routes(self):
+        state = self._fake_state()
+        state["probe_layer_route_texts"] = ["9-15", ""]
+        state["probe_timing_route_texts"] = ["", "0.0-0.5~0.1"]
+        _registry_store("suggest-routes", state)
+        out = AnimaArtistProbeReport().report("suggest-routes")
+        chain = out["result"][1]
+        self.assertEqual(
+            chain,
+            "0.5::strong_artist@9-15::, 1.5::weak_artist%0.0-0.5~0.1::",
+        )
+
+    def test_no_data_returns_empty_chain(self):
+        out = AnimaArtistProbeReport().report("does-not-exist")
+        self.assertEqual(out["result"][1], "")
+
     def test_registry_store_shares_step_stats_by_reference(self):
         state = self._fake_state()
         _registry_store("ref-check", state)
@@ -170,6 +224,7 @@ class CategoryReorgTests(unittest.TestCase):
         "AnimaArtistTagCheck": "Anima/Diagnostics",
         "AnimaArtistABVariants": "Anima/Diagnostics",
         "AnimaArtistImpactMap": "Anima/Diagnostics",
+        "AnimaArtistContactSheet": "Anima/Diagnostics",
         "AnimaArtistRecipeSave": "Anima/Recipes",
         "AnimaArtistRecipeLoad": "Anima/Recipes",
     }
