@@ -7,6 +7,22 @@ import torch
 logger = logging.getLogger(__name__)
 
 
+def should_reraise(error):
+    """Return True for runtime-control errors that must abort immediately."""
+    for name in ("OutOfMemoryError",):
+        cuda_error = getattr(getattr(torch, "cuda", None), name, None)
+        if cuda_error is not None and isinstance(error, cuda_error):
+            return True
+        torch_error = getattr(torch, name, None)
+        if torch_error is not None and isinstance(error, torch_error):
+            return True
+    try:
+        from comfy.model_management import InterruptProcessingException
+    except ImportError:
+        return False
+    return isinstance(error, InterruptProcessingException)
+
+
 def _in_stabilizer_window(state):
     """True while the current sigma is at or above the stabilizer threshold.
 
@@ -20,6 +36,9 @@ def _in_stabilizer_window(state):
     if cur is None:
         return True
     return float(cur) >= float(threshold)
+
+
+in_stabilizer_window = _in_stabilizer_window
 
 
 def _context_fingerprint(context):
@@ -42,6 +61,35 @@ def _context_fingerprint(context):
         return (tuple(context.shape), str(context.dtype), None)
 
 
+context_fingerprint = _context_fingerprint
+
+
+def tensor_cache_signature(tensor):
+    """Describe a retained tensor without synchronizing or reading its values."""
+    if tensor is None or not torch.is_tensor(tensor):
+        return None
+    try:
+        version = int(tensor._version)
+    except RuntimeError:
+        version = None
+    try:
+        stride = tuple(tensor.stride())
+        storage_offset = int(tensor.storage_offset())
+    except RuntimeError:
+        stride = None
+        storage_offset = None
+    return (
+        id(tensor),
+        tuple(tensor.shape),
+        stride,
+        storage_offset,
+        str(tensor.dtype),
+        tensor.device.type,
+        tensor.device.index,
+        version,
+    )
+
+
 def _forward_fingerprint(st, context):
     """Per-forward fingerprint so several forwards at the same sigma (multiple
     positive conds, regional prompts, VRAM-split batches) keep independent
@@ -60,6 +108,9 @@ def _forward_fingerprint(st, context):
     fp = _context_fingerprint(context)
     memo[key] = fp
     return fp
+
+
+forward_fingerprint = _forward_fingerprint
 
 
 def reset_run_state(state):
@@ -88,6 +139,7 @@ def reset_run_state(state):
     state["_static_cache"] = {}
     state["_ctx_fp_memo"] = {}
     state["_anchor_failed"] = False
+    state["_adapter_anchor_failed"] = False
     probe_stats = state.get("probe_stats")
     if isinstance(probe_stats, dict):
         probe_stats.clear()
@@ -247,6 +299,16 @@ def broadcast_batch(t, batch_size):
     return t[:1].expand(batch_size, -1, -1)
 
 
+def _expand_cond_flags(cou, batch_size):
+    if cou is not None and len(cou) > 0:
+        if len(cou) == batch_size:
+            return [value == 0 for value in cou]
+        if batch_size % len(cou) == 0:
+            chunk_size = batch_size // len(cou)
+            return [value == 0 for value in cou for _ in range(chunk_size)]
+    return None
+
+
 def resolve_mask(cou, batch_size, apply_to_uncond, state):
     """Build a per-row injection mask from ComfyUI's cond_or_uncond marker.
 
@@ -275,6 +337,20 @@ def resolve_mask(cou, batch_size, apply_to_uncond, state):
         )
         state["_warned"] = True
     return [True] * batch_size
+
+
+def resolve_strengths(cou, batch_size, apply_to_uncond, strength, uncond_strength):
+    resolved_strength = float(strength)
+    if not apply_to_uncond:
+        return [resolved_strength] * batch_size
+    cond_flags = _expand_cond_flags(cou, batch_size)
+    if cond_flags is None:
+        return [resolved_strength] * batch_size
+    resolved_uncond = max(0.0, min(1.0, float(uncond_strength)))
+    return [
+        resolved_strength if is_cond else resolved_strength * resolved_uncond
+        for is_cond in cond_flags
+    ]
 
 
 def in_sigma_range(state):

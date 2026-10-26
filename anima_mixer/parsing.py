@@ -16,6 +16,29 @@ Chain syntax overview (all parts optional, composable):
 from .constants import WEIGHT_MAX, WEIGHT_MIN
 
 
+def parse_anchor_seed_list(text, max_count):
+    seeds = []
+    seen = set()
+    for part in str(text or "").replace("，", ",").split(","):
+        value = part.strip()
+        if not value:
+            continue
+        try:
+            seed = int(value)
+        except ValueError:
+            continue
+        if seed < 0:
+            continue
+        seed %= 2 ** 64
+        if seed in seen:
+            continue
+        seen.add(seed)
+        seeds.append(seed)
+        if len(seeds) >= int(max_count):
+            break
+    return seeds
+
+
 def clamp_float(value, lo, hi):
     value = float(value)
     if value != value:  # NaN compares unequal to itself

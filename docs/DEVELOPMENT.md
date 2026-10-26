@@ -14,6 +14,9 @@ How to add a new node to this pack and ship it to the ComfyUI registry.
   - `nodes_recipes.py` — `AnimaArtistRecipeSave` / `AnimaArtistRecipeLoad`.
   - `nodes_diagnostics.py` — `AnimaArtistTagCheck` / `AnimaArtistABVariants` /
     `AnimaArtistImpactMap`.
+  - `nodes_embedding.py` — the experimental `AnimaArtistAdapterMixer` node.
+  - `embedding.py`, `alignment.py`, `adapter_anchor.py` — post-Adapter mixing,
+    T5-token alignment, and Adapter Q-only Anchor support.
   - `wrapper.py` — the cross-attention forward wrapper (dispatch + fusion math).
   - `wrapper_stabilizers.py` — `StabilizerMixin` (EMA, static capture, norm
     lock, delta cap, anchor-Q).

@@ -26,9 +26,11 @@ def project_perpendicular(delta, base):
     Projection is per token (inner product over the last dim):
     ``delta_perp = delta - (delta . base_unit) * base_unit``
     """
-    base_norm_sq = (base * base).sum(dim=-1, keepdim=True).clamp(min=1e-8)
-    proj_coef = (delta * base).sum(dim=-1, keepdim=True) / base_norm_sq
-    return delta - proj_coef * base
+    delta_f32 = delta.to(torch.float32)
+    base_f32 = base.to(torch.float32)
+    base_norm_sq = (base_f32 * base_f32).sum(dim=-1, keepdim=True).clamp(min=1e-8)
+    proj_coef = (delta_f32 * base_f32).sum(dim=-1, keepdim=True) / base_norm_sq
+    return (delta_f32 - proj_coef * base_f32).to(delta.dtype)
 
 
 def smoothstep(t):

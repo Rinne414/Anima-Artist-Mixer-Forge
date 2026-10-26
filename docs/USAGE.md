@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This is a ComfyUI custom node that provides **multi-artist mixing** for the Anima model. It hooks into the cross-attention layers and combines multiple artist conditionings with controllable strategies, sidestepping the interference that LLM-based text encoders suffer from when multiple artist tags coexist in a single prompt.
+This is a ComfyUI custom node that provides **multi-artist mixing** for the Anima model. It combines independently encoded artists either inside cross-attention or once after LLMAdapter, sidestepping the interference that LLM-based text encoders suffer from when multiple artist tags coexist in a single prompt.
 
 The companion `AnimaArtistPack` node provides a one-shot experience: write your artist list in one text box (comma or newline separated) and your main prompt in another. The node automatically splits, encodes, and packages everything for downstream use.
 
@@ -21,7 +21,7 @@ Anima uses an LLM as its text encoder (unlike SDXL's CLIP). LLM encoders are hea
 - Single artist tag: the LLM produces a conditioning that captures that artist's style accurately. Works well.
 - Multiple artist tags together: the artist tags' embeddings interfere with each other, and the resulting conditioning ends up looking like neither A nor B but a "squeezed-together" middle ground.
 
-This node encodes each artist as a **separate** conditioning, bypassing the interference at the encoding stage, then mixes them inside the model at the cross-attention level using selectable strategies. Mixing happens in an already-stabilized feature space, where it's far more controllable than mixing at the prompt level.
+This node encodes each artist as a **separate** conditioning, bypassing the interference at the encoding stage, then mixes them inside the model using either the established cross-attention strategies or the experimental post-Adapter projection.
 
 The product goal is practical image generation: predictable artist mixing on top of the base model. The default path should preserve the prompt and expose controllable artist influence. Automatic low-drift routing and stabilizers are opt-in tools, not the default style source.
 
@@ -147,6 +147,65 @@ Key points:
 - Use `AnimaArtistPreset(preset=compatibility_safe)` first when combining with regional prompts, Forge Couple-style routing, attention masks, or other cross-attention patch nodes
 - Common layer/timing controls come via `AnimaArtistSimpleOptions`; stabilizers and debug controls stay in `AnimaArtistOptions (Expert)`
 - Use `AnimaArtistInspector` to show the actual effective weights, block map, preset settings, and configuration warnings inside ComfyUI
+
+## Post-adapter mixing (experimental)
+
+`AnimaArtistAdapterMixer` is an alternative to `AnimaArtistCrossAttn`. It
+mixes the artist contexts once after LLMAdapter instead of running an artist
+branch inside each patched attention layer:
+
+```text
+AnimaArtistPack -> AnimaArtistAdapterMixer -> KSampler model
+                              |
+                              +-> base_prompt -> KSampler positive
+```
+
+Start with:
+
+```text
+strength          = 1.0
+normalize_weights = true
+alignment_mode    = base_anchored
+apply_to_uncond   = false
+```
+
+The node computes a perpendicular delta per token:
+
+```text
+mixed = base + strength * perpendicular(sum(weight_i * artist_i) - base, base)
+```
+
+`base_anchored` preserves every real base and artist Adapter row. It aligns
+matching T5 token IDs on common positions, places unmatched artist rows in gap
+slots, and uses an LCS match only when exact suffix alignment is unavailable.
+It does not pool, truncate, or replace the artist's Qwen source embedding and
+T5 target sequence. Because negative-prompt T5 IDs are not available at the
+model wrapper, this mode keeps uncond rows unchanged.
+
+`shared_base_ids` is the older A/B mode. Every artist Adapter pass uses the
+base prompt's target T5 grid, which makes positions match directly but replaces
+the artist-specific target IDs and weights.
+
+For optional cross-seed control, connect `AnimaArtistOptions` and enable
+`artist_anchor_q`. An empty `anchor_seed_list` generates
+`anchor_seeds_count` unique 64-bit seeds for each node execution; a manual list
+such as `42,12345` is deterministic and permits cache reuse. The node returns
+the resolved list through `anchor_seeds_used`.
+
+`anchor_refresh_mode=once` reuses one start-sigma Q snapshot. `warm_cache`
+captures a complete first run, retains `anchor_cache_points` averaged Q
+keyframes in CPU RAM, and interpolates them on later runs. `uniform_sigma`
+spaces keyframes by sigma; `adaptive_q` retains frames with the largest sampled
+Q interpolation error. Changing the prompt/context, artist mix, batch shape,
+manual seeds, cache settings, or stabilizer range rebuilds the session cache.
+Automatic seeds intentionally start a new cache cycle. Eight full-layer
+keyframes can require several GiB at 1024-class resolutions; reduce
+`anchor_cache_points` or `anchor_deep_layer_threshold` when needed.
+
+Do not chain Adapter Mixer and Cross-Attn Mixer on the same model. They are
+alternative algorithms, and chaining would inject the artist set twice. A
+complete API-format example is available at
+[`08_post_adapter_mixer.json`](../workflow/node_usage_showcase/08_post_adapter_mixer.json).
 
 ## Parameters
 
@@ -378,12 +437,16 @@ Not connecting this node = default behavior. Prefer `AnimaArtistSimpleOptions` f
 | `static_capture_mode` | What static capture freezes: `output` (default), `delta`, `blend`, or `blend_perp`. `output` is the strongest lock; the others reintroduce progressively more base motion |
 | `static_capture_blend_alpha` | Used by `static_capture_mode` `blend` / `blend_perp`. Range 0~1, default 0.25. Higher returns more base motion; lower keeps the freeze stronger |
 | `artist_anchor_q` | Replace user-seed Q with a fixed-seed anchor's Q. The strongest cross-seed stabilizer |
+| `anchor_seed_list` (v27.7) | Optional comma-separated 64-bit seeds. Empty generates fresh seeds when Anchor-Q is enabled; a manual list is deterministic |
 | `anchor_seeds_count` | Number of anchor seeds to average. Default 1, range 1~4 |
 | `anchor_user_blend` | Blend ratio between anchor Q and user Q. 0 = pure anchor, 1 = pure user |
 | `anchor_deep_layer_threshold` | Use anchor for shallow layers `[0, N)`, user Q for deep layers `[N, end]`. -1 disables |
 | `stabilizer_end_percent` | End point for cache-based stabilizers. `1.0` = whole sampling pass; `0.4-0.6` lets EMA/static/anchor yield during later dynamic steps |
 | `anchor_base_norm_ref` (v26) | Optional A/B path for `anchor_q + match_base_norm`; uses the fixed anchor's base output as the norm reference instead of the current seed's base output. Off by default |
 | `anchor_refresh_each_step` (v26) | Rebuild the fixed-seed anchor at every sampling step instead of only the first step. Slow A/B option, not a recommended default |
+| `anchor_refresh_mode` (v27.7) | Adapter only: `once` keeps one Q snapshot; `warm_cache` records bounded sigma-keyframed Q for later runs |
+| `anchor_cache_points` (v27.7) | Adapter only: number of CPU warm-cache keyframes. Default 8, range 2~12 |
+| `anchor_keyframe_mode` (v27.7) | Adapter only: `uniform_sigma` or error-ranked `adaptive_q` keyframe selection |
 | `compatibility_mode` | Forces `concat + concat_with_base`, disables EMA/static/anchor stabilizers, and reduces conflict risk with regional/attention-patching nodes |
 | `max_batch_artists` (v26) | Caps how many artists share one batched cross-attention forward. `0` = no cap. Set `2-8` to bound peak VRAM with many artists at high resolution instead of falling back to slow sequential mode |
 | `low_vram_cache` (v26) | Stores static-capture and anchor caches in system RAM instead of VRAM. Saves hundreds of MB at high resolution for a small per-step transfer cost |
@@ -1024,8 +1087,10 @@ Runtime diagnostics:
 
 ## Acknowledgements
 
-Special thanks to **汐浮尘** for co-development, testing, and design contributions during the development of this node. The `AnimaArtistPack` split-and-encode design comes from their improvement.
+Special thanks to **汐浮尘** for co-development, testing, and design contributions during the development of this node. The `AnimaArtistPack` split-and-encode design comes from their improvement. Thanks to **spawner1145** for proposing the post-Adapter mixing formula adopted upstream.
 
 ## License
 
-MIT License. See [LICENSE](../LICENSE) for the full text.
+Starting with Forge v27.7.0, this project is licensed under the **GNU General
+Public License v3.0**. See [LICENSE](../LICENSE) for the complete terms.
+Earlier Forge releases remain under the MIT license that accompanied them.

@@ -4,6 +4,9 @@ FUSION_INTERPOLATE = "interpolate"
 FUSION_CONCAT_WITH_BASE = "concat_with_base"
 FUSION_BASE_PRESERVE = "base_preserve"
 
+ALIGN_BASE_ANCHORED = "base_anchored"
+ALIGN_SHARED_BASE_IDS = "shared_base_ids"
+
 FUSION_CHOICES = [
     FUSION_INTERPOLATE,
     FUSION_CONCAT_WITH_BASE,
@@ -59,7 +62,24 @@ DRIFT_AUTO_CLOSEUP_DELTA_CAP_RATIO = 0.75
 ANCHOR_SEED = 42                          # default single-anchor seed
 ANCHOR_SEEDS_POOL = [42, 100, 200, 300]   # seeds used when averaging multiple anchors
 ANCHOR_SEEDS_MAX = 4                      # UI upper bound = len(ANCHOR_SEEDS_POOL)
+ANCHOR_SEED_MAX = 0xFFFFFFFFFFFFFFFF
 ANCHOR_LAYER_THRESHOLD_DISABLED = -1      # -1 means every layer uses the anchor Q
+
+ANCHOR_REFRESH_ONCE = "once"
+ANCHOR_REFRESH_WARM_CACHE = "warm_cache"
+ANCHOR_REFRESH_MODES = (
+    ANCHOR_REFRESH_ONCE,
+    ANCHOR_REFRESH_WARM_CACHE,
+)
+ANCHOR_KEYFRAME_UNIFORM_SIGMA = "uniform_sigma"
+ANCHOR_KEYFRAME_ADAPTIVE_Q = "adaptive_q"
+ANCHOR_KEYFRAME_MODES = (
+    ANCHOR_KEYFRAME_UNIFORM_SIGMA,
+    ANCHOR_KEYFRAME_ADAPTIVE_Q,
+)
+ANCHOR_CACHE_POINTS_DEFAULT = 8
+ANCHOR_CACHE_POINTS_MIN = 2
+ANCHOR_CACHE_POINTS_MAX = 12
 
 # v26: Stabilizer end percent - allows stabilizers to auto-disable after certain sampling progress
 # for compatibility with FLS (Foveated Latent Sampler) and similar step-delta-based samplers

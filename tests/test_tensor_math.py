@@ -1118,6 +1118,7 @@ class AnchorFingerprintTest(unittest.TestCase):
                 (1, 2, 3),
                 _context_fingerprint(torch.ones(1, 4, 3)),
                 1.0,
+                (42,),
             ),
             "_anchor_failed": False,
         }

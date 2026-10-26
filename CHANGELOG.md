@@ -1,5 +1,28 @@
 # Changelog
 
+## v27.7.0 (2026-07-27)
+
+Sync with upstream An1X3R/Anima-Artist-Mixer 26.8.2 while preserving the
+forge's v27 diagnostics, presets, routing, and stability controls.
+
+- Add `AnimaArtistAdapterMixer`, an experimental post-LLMAdapter path that
+  mixes artist embeddings once at the model boundary instead of adding an
+  artist branch inside every patched cross-attention layer.
+- Add lossless T5-token-guided `base_anchored` alignment and the older
+  `shared_base_ids` A/B mode. Base-anchored alignment preserves every real
+  base and artist Adapter row without pooling or truncation.
+- Add optional Adapter Q-only Anchor with `once` and bounded CPU
+  `warm_cache` refresh modes, uniform/adaptive Q keyframes, automatic unique
+  64-bit anchor seeds, and a reusable manual seed list.
+- Keep Adapter Mixer and Cross-Attn Mixer mutually exclusive so artist
+  injection cannot be applied twice to one model.
+- Port upstream's FP16-safe perpendicular projection and full Adapter test
+  suite, adapted to the forge's split module layout and workflow contracts.
+- Add a complete API workflow at
+  `workflow/node_usage_showcase/08_post_adapter_mixer.json`.
+- Adopt upstream's GPL-3.0 license for this release. Earlier forge releases
+  remain available under the MIT license that accompanied them.
+
 ## v27.6.1 (2026-07-17)
 
 Two new one-click templates so the v27.6 diagnostics need zero manual

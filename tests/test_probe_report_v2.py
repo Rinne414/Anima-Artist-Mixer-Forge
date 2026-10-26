@@ -223,6 +223,7 @@ class CategoryReorgTests(unittest.TestCase):
         "AnimaArtistStyleBalance": "Anima/Setup",
         "AnimaArtistChainBuilder": "Anima/Setup",
         "AnimaArtistCrossAttn": "Anima/Setup",
+        "AnimaArtistAdapterMixer": "Anima/Adapter",
         "AnimaArtistInspector": "Anima/Diagnostics",
         "AnimaArtistChainPreview": "Anima/Diagnostics",
         "AnimaArtistProbe": "Anima/Diagnostics",

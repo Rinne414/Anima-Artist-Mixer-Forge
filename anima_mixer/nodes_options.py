@@ -1,9 +1,19 @@
 """Options nodes: the simple and expert runtime-option builders."""
 
+import secrets
+
 from .constants import (
+    ANCHOR_CACHE_POINTS_DEFAULT,
+    ANCHOR_CACHE_POINTS_MAX,
+    ANCHOR_CACHE_POINTS_MIN,
+    ANCHOR_KEYFRAME_MODES,
+    ANCHOR_KEYFRAME_UNIFORM_SIGMA,
     LAYER_MODE_AUTO,
     LAYER_MODE_CHOICES,
     ANCHOR_LAYER_THRESHOLD_DISABLED,
+    ANCHOR_REFRESH_MODES,
+    ANCHOR_REFRESH_ONCE,
+    ANCHOR_SEED_MAX,
     ANCHOR_SEEDS_MAX,
     CONTRIB_BALANCE_ALPHA_DEFAULT,
     MIXED_DELTA_CAP_RATIO_DEFAULT,
@@ -23,6 +33,7 @@ from .constants import (
 from .options import (
     layer_filter_for_mode,
 )
+from .parsing import parse_anchor_seed_list
 
 
 class AnimaArtistSimpleOptions:
@@ -531,13 +542,78 @@ class AnimaArtistOptions:
                         ),
                     },
                 ),
+                "anchor_seed_list": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": False,
+                        "tooltip": (
+                            "Optional comma-separated Anchor-Q seeds. Empty generates "
+                            "fresh seeds when Anchor-Q is enabled."
+                        ),
+                    },
+                ),
+                "anchor_refresh_mode": (
+                    list(ANCHOR_REFRESH_MODES),
+                    {
+                        "default": ANCHOR_REFRESH_ONCE,
+                        "tooltip": (
+                            "[Adapter Mixer only] once keeps the start-of-run Q snapshot. "
+                            "warm_cache records a sigma-keyframed Q trajectory for reuse."
+                        ),
+                    },
+                ),
+                "anchor_cache_points": (
+                    "INT",
+                    {
+                        "default": ANCHOR_CACHE_POINTS_DEFAULT,
+                        "min": ANCHOR_CACHE_POINTS_MIN,
+                        "max": ANCHOR_CACHE_POINTS_MAX,
+                        "step": 1,
+                        "tooltip": (
+                            "[Adapter Mixer only] CPU Q keyframes retained by warm_cache."
+                        ),
+                    },
+                ),
+                "anchor_keyframe_mode": (
+                    list(ANCHOR_KEYFRAME_MODES),
+                    {
+                        "default": ANCHOR_KEYFRAME_UNIFORM_SIGMA,
+                        "tooltip": (
+                            "[Adapter Mixer only] uniform_sigma spaces frames by sigma; "
+                            "adaptive_q retains frames with the largest Q interpolation error."
+                        ),
+                    },
+                ),
             },
         }
 
-    RETURN_TYPES = ("ANIMA_OPTS",)
-    RETURN_NAMES = ("advanced_options",)
+    RETURN_TYPES = ("ANIMA_OPTS", "STRING")
+    RETURN_NAMES = ("advanced_options", "anchor_seeds_used")
     FUNCTION = "build"
     CATEGORY = "Anima/Setup"
+
+    @classmethod
+    def IS_CHANGED(
+        cls,
+        anchor_seed_list="",
+        artist_anchor_q=False,
+        anchor_refresh_mode=ANCHOR_REFRESH_ONCE,
+        anchor_cache_points=ANCHOR_CACHE_POINTS_DEFAULT,
+        anchor_keyframe_mode=ANCHOR_KEYFRAME_UNIFORM_SIGMA,
+        **kwargs,
+    ):
+        if artist_anchor_q and not parse_anchor_seed_list(anchor_seed_list, ANCHOR_SEEDS_MAX):
+            return float("NaN")
+        return "|".join(
+            (
+                str(anchor_seed_list or ""),
+                str(anchor_refresh_mode),
+                str(int(anchor_cache_points)),
+                str(anchor_keyframe_mode),
+                str(bool(artist_anchor_q)),
+            )
+        )
 
     def build(
         self,
@@ -571,7 +647,25 @@ class AnimaArtistOptions:
         contribution_balance_alpha=CONTRIB_BALANCE_ALPHA_DEFAULT,
         mixed_delta_cap=False,
         mixed_delta_cap_ratio=MIXED_DELTA_CAP_RATIO_DEFAULT,
+        anchor_seed_list="",
+        anchor_refresh_mode=ANCHOR_REFRESH_ONCE,
+        anchor_cache_points=ANCHOR_CACHE_POINTS_DEFAULT,
+        anchor_keyframe_mode=ANCHOR_KEYFRAME_UNIFORM_SIGMA,
     ):
+        manual_seeds = parse_anchor_seed_list(anchor_seed_list, ANCHOR_SEEDS_MAX)
+        seeds_used = list(manual_seeds)
+        if artist_anchor_q and not seeds_used:
+            requested_count = max(1, min(int(anchor_seeds_count), ANCHOR_SEEDS_MAX))
+            seen = set()
+            while len(seeds_used) < requested_count:
+                seed = secrets.randbelow(ANCHOR_SEED_MAX + 1)
+                if seed not in seen:
+                    seen.add(seed)
+                    seeds_used.append(seed)
+        resolved_seed_list = ",".join(str(seed) for seed in seeds_used)
+        resolved_keyframe_mode = str(anchor_keyframe_mode)
+        if resolved_keyframe_mode not in ANCHOR_KEYFRAME_MODES:
+            resolved_keyframe_mode = ANCHOR_KEYFRAME_UNIFORM_SIGMA
         return (
             {
                 "start_block": int(start_block),
@@ -586,6 +680,8 @@ class AnimaArtistOptions:
                 "static_capture_mode": str(static_capture_mode or STATIC_CAPTURE_MODE_OUTPUT),
                 "static_capture_blend_alpha": float(static_capture_blend_alpha),
                 "artist_anchor_q": bool(artist_anchor_q),
+                "anchor_seed_list": resolved_seed_list,
+                "anchor_seed_list_is_manual": bool(manual_seeds),
                 "anchor_seeds_count": int(anchor_seeds_count),
                 "anchor_user_blend": float(anchor_user_blend),
                 "anchor_deep_layer_threshold": int(anchor_deep_layer_threshold),
@@ -604,7 +700,14 @@ class AnimaArtistOptions:
                 "contribution_balance_alpha": float(contribution_balance_alpha),
                 "mixed_delta_cap": bool(mixed_delta_cap),
                 "mixed_delta_cap_ratio": float(mixed_delta_cap_ratio),
+                "anchor_refresh_mode": str(anchor_refresh_mode),
+                "anchor_cache_points": max(
+                    ANCHOR_CACHE_POINTS_MIN,
+                    min(int(anchor_cache_points), ANCHOR_CACHE_POINTS_MAX),
+                ),
+                "anchor_keyframe_mode": resolved_keyframe_mode,
             },
+            resolved_seed_list,
         )
 
 

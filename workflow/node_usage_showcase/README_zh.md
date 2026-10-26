@@ -1,6 +1,6 @@
 # Anima 节点用途展示 workflow
 
-这个文件夹用来说明当前 18 个节点各自为什么存在，以及应该在什么场景使用。
+这个文件夹用来说明当前 21 个节点各自为什么存在，以及应该在什么场景使用。
 
 这些文件是 **ComfyUI API workflow**。可以像 `workflow/pr4_self_test_api` 一样用 `/prompt` 提交运行，也可以只作为接线参考。
 
@@ -39,8 +39,9 @@ $server = "http://127.0.0.1:8188"
 | `05_recipe_save_load_share.json` | `AnimaArtistPreset`, `AnimaArtistRecipeSave`, `AnimaArtistRecipeLoad`, `AnimaArtistPack`, `AnimaArtistPresetApply`, `AnimaArtistInspector` | 保存和载入可分享 recipe |
 | `06_probe_and_report.json` | `AnimaArtistPack`, `AnimaArtistProbe`, `AnimaArtistProbeReport` | 测量 artist 风格主要影响哪些层 |
 | `07_diagnostics_tagcheck_ab_impact.json` | `AnimaArtistTagCheck`, `AnimaArtistABVariants`, `AnimaArtistImpactMap`, `AnimaArtistContactSheet` | 验证每个 artist 是否真的起作用：重复 tag 检测、同 seed A/B 变体系列、差异热图 |
+| `08_post_adapter_mixer.json` | `AnimaArtistPack`, `AnimaArtistAdapterMixer` | 在 LLM Adapter 输出后混合 artist embedding，不逐层增加 cross-attention 分支 |
 
-## 20 个节点的覆盖情况
+## 21 个节点的覆盖情况
 
 | 节点 | 出现位置 |
 |---|---|
@@ -54,6 +55,7 @@ $server = "http://127.0.0.1:8188"
 | `AnimaArtistPack` | `02`, `03`, `04`, `05`, `06` |
 | `AnimaArtistPresetApply` | `02`, `03`, `05` |
 | `AnimaArtistCrossAttn` | `04_chain_builder_preview_manual_crossattn.json` |
+| `AnimaArtistAdapterMixer` | `08_post_adapter_mixer.json` |
 | `AnimaArtistOptions` | `04_chain_builder_preview_manual_crossattn.json` |
 | `AnimaArtistPreset` | `02`, `05` |
 | `AnimaArtistInspector` | `02`, `03`, `04`, `05` |
@@ -67,7 +69,7 @@ $server = "http://127.0.0.1:8188"
 
 ## 设计原则
 
-- v27.2 起节点菜单分为 `Anima/Basic`（入门）、`Anima/Setup`（标准接线）、`Anima/Diagnostics`（诊断）、`Anima/Recipes`（配方）四组；只影响菜单位置，节点 ID 和已保存的 workflow 不受影响。
+- 节点菜单分为 `Anima/Basic`（入门）、`Anima/Setup`（标准接线）、`Anima/Adapter`（后适配器混合）、`Anima/Diagnostics`（诊断）、`Anima/Recipes`（配方）五组；只影响菜单位置，节点 ID 和已保存的 workflow 不受影响。
 - 新手只需要 `AnimaArtistBasic`。
 - 常规 preset 工作流使用 `AnimaArtistPack + AnimaArtistPreset + AnimaArtistPresetApply`。
 - preset apply 节点不显示 `combine_mode`、`fusion_mode`、`strength`，因为这些值由 preset 决定。

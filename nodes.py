@@ -14,6 +14,7 @@ from .anima_mixer.nodes_core import (
     AnimaArtistProbe,
     AnimaArtistProbeReport,
 )
+from .anima_mixer.nodes_embedding import AnimaArtistAdapterMixer
 from .anima_mixer.nodes_ui import (
     AnimaArtistChainBuilder,
     AnimaArtistChainPreview,
@@ -31,6 +32,7 @@ __all__ = [
     "NODE_DISPLAY_NAME_MAPPINGS",
     "AnimaArtistBasic",
     "AnimaArtistCrossAttn",
+    "AnimaArtistAdapterMixer",
     "AnimaArtistPack",
     "AnimaArtistPresetApply",
     "AnimaArtistProbe",

@@ -1,6 +1,6 @@
 # Anima-Artist-Mixer-Forge
 
-A ComfyUI custom node pack that enables **multi-artist mixing** for the Anima model by hooking into its cross-attention layers.
+A ComfyUI custom node pack that enables **multi-artist mixing** for the Anima model through either cross-attention outputs or post-LLMAdapter embeddings.
 
 > **Forge notice:** this is a community fork ("forge") of
 > [An1X3R/Anima-Artist-Mixer](https://github.com/An1X3R/Anima-Artist-Mixer).
@@ -13,6 +13,28 @@ A ComfyUI custom node pack that enables **multi-artist mixing** for the Anima mo
 > `anima-artist-mixer`).
 
 ![surtr](docs/images/hero.jpg)
+
+## New in v27.7: Post-Adapter Mixer
+
+`Anima Artist Adapter Mixer (Experimental)` is an alternative to the established
+Cross-Attn path. It mixes artist embeddings once after Anima's LLMAdapter and
+applies a perpendicular artist delta at the model boundary. Upstream testing
+approached twice the Cross-Attn throughput while keeping similar visual quality;
+actual gains depend on artist count, resolution, sampler, and hardware.
+
+```text
+Anima Artist Pack -> Anima Artist Adapter Mixer -> KSampler model
+                                  |
+                                  +-> base_prompt -> KSampler positive
+```
+
+Start with `alignment_mode=base_anchored`, `strength=1.0`,
+`normalize_weights=true`, and `apply_to_uncond=false`. The optional Q-only
+Anchor supports automatic or fixed 64-bit seeds and a bounded CPU `warm_cache`
+for reuse across later sampler seeds. Adapter Mixer and Cross-Attn Mixer are
+alternative algorithms and must not be chained. See
+[Post-adapter mixing](docs/USAGE.md#post-adapter-mixing-experimental) and the
+[API workflow](workflow/node_usage_showcase/08_post_adapter_mixer.json).
 
 ## First image in 60 seconds
 
@@ -46,7 +68,7 @@ layer routing.
 
 ## What it does
 
-Anima uses an LLM as its text encoder. When multiple artist tags are stacked in a single prompt, the LLM's contextualization causes them to interfere with each other, producing a conditioning that resembles neither artist clearly. This node encodes each artist independently and mixes them at the model's cross-attention layer, sidestepping the interference at the prompt-encoding stage.
+Anima uses an LLM as its text encoder. When multiple artist tags are stacked in a single prompt, the LLM's contextualization causes them to interfere with each other, producing a conditioning that resembles neither artist clearly. This pack encodes each artist independently and mixes them either at the model's cross-attention layers or once after LLMAdapter, sidestepping interference at the prompt-encoding stage.
 
 The bundled `AnimaArtistPack` node provides a one-shot experience: write your artist list (separated by commas or newlines) in one text box, your main prompt in another, and the node handles splitting, encoding, and packaging automatically.
 
@@ -222,6 +244,7 @@ Generation time scales with the number of active artists, active layers, and act
 | Path | Speed expectation |
 |---|---|
 | no mixer / `prompt_passthrough` | close to the ordinary Anima prompt path |
+| `AnimaArtistAdapterMixer` | upstream testing approached twice the Cross-Attn throughput; varies by workflow and hardware |
 | `balanced`, `drift_soft`, `scene_lock`, `face_lock`, `stable_seed` | slower as active artist count increases |
 | `fast_preview` / `compatibility_safe` | usually faster concat path, but less precise as an artist mixer |
 | layer routes / timing routes | reduce cost only for the layers or sampling steps where artists are inactive |
@@ -244,7 +267,7 @@ The diagnostics nodes answer "is this artist doing anything, what did it change,
 
 See [`workflow/node_usage_showcase/07_diagnostics_tagcheck_ab_impact.json`](workflow/node_usage_showcase/07_diagnostics_tagcheck_ab_impact.json) for all three wired together.
 
-Since v27.2 the node menu groups the pack into `Anima/Basic`, `Anima/Setup`, `Anima/Diagnostics`, and `Anima/Recipes` (menu-only; node ids and saved workflows are unaffected).
+The node menu groups the pack into `Anima/Basic`, `Anima/Setup`, `Anima/Adapter`, `Anima/Diagnostics`, and `Anima/Recipes` (menu-only; node ids and saved workflows are unaffected).
 
 ## Sharing recipes (v26)
 
@@ -268,8 +291,11 @@ See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for how to add a new node and how
 
 ## Acknowledgements
 
-This pack is a fork of [An1X3R/Anima-Artist-Mixer](https://github.com/An1X3R/Anima-Artist-Mixer) — full credit to **An1X3R** for the original project. Special thanks to **汐浮尘/utowo** for co-development, testing, and design contributions. The `AnimaArtistPack` split-and-encode design comes from their improvement.
+This pack is a fork of [An1X3R/Anima-Artist-Mixer](https://github.com/An1X3R/Anima-Artist-Mixer) — full credit to **An1X3R** for the original project. Special thanks to **汐浮尘/utowo** for co-development, testing, and design contributions. The `AnimaArtistPack` split-and-encode design comes from their improvement. Thanks to **spawner1145** for proposing the post-Adapter artist-mixing formula adopted upstream.
 
 ## License
 
-MIT License. See [LICENSE](LICENSE) for the full text.
+Starting with Forge v27.7.0, this project is licensed under the **GNU General
+Public License v3.0**. See [LICENSE](LICENSE) for the complete terms. Earlier
+Forge releases remain available under the MIT license that accompanied them;
+the GPLv3 change does not revoke rights already granted for those versions.

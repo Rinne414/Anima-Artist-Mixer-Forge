@@ -19,6 +19,7 @@ from .nodes_diagnostics import (
     AnimaArtistImpactMap,
     AnimaArtistTagCheck,
 )
+from .nodes_embedding import AnimaArtistAdapterMixer
 from .nodes_ui import (
     AnimaArtistChainBuilder,
     AnimaArtistChainPreview,
@@ -41,6 +42,7 @@ NODE_CLASS_MAPPINGS = {
     "AnimaArtistPack": AnimaArtistPack,
     "AnimaArtistPresetApply": AnimaArtistPresetApply,
     "AnimaArtistCrossAttn": AnimaArtistCrossAttn,
+    "AnimaArtistAdapterMixer": AnimaArtistAdapterMixer,
     "AnimaArtistOptions": AnimaArtistOptions,
     "AnimaArtistStyleBalance": AnimaArtistStyleBalance,
     "AnimaArtistPreset": AnimaArtistPreset,
@@ -64,6 +66,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "AnimaArtistPack": "Anima Artist Pack (Split + Encode)",
     "AnimaArtistPresetApply": "Anima Artist Apply Preset",
     "AnimaArtistCrossAttn": "Anima Artist Cross-Attn (Manual/Advanced)",
+    "AnimaArtistAdapterMixer": "Anima Artist Adapter Mixer (Experimental)",
     "AnimaArtistOptions": "Anima Artist Options (Expert)",
     "AnimaArtistStyleBalance": "Anima Artist Style Balance",
     "AnimaArtistPreset": "Anima Artist Preset (Advanced)",

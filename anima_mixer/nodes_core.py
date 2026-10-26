@@ -28,6 +28,7 @@ from .constants import (
 from .options import merge_runtime_options
 from .parsing import (
     build_passthrough_prompt,
+    parse_anchor_seed_list,
     resolve_artist_layer_routes,
     resolve_artist_timing_routes,
     resolve_target_blocks_from_options,
@@ -141,6 +142,8 @@ def _build_runtime_state(
             adv.get("static_capture_blend_alpha", STATIC_CAPTURE_BLEND_ALPHA_DEFAULT)
         ),
         "artist_anchor_q": bool(adv.get("artist_anchor_q", False)),
+        "anchor_seed_list": list(adv.get("anchor_seed_list") or []),
+        "anchor_seed_list_is_manual": bool(adv.get("anchor_seed_list_is_manual", False)),
         "anchor_seeds_count": int(adv.get("anchor_seeds_count", 1)),
         "anchor_user_blend": float(adv.get("anchor_user_blend", 0.0)),
         "anchor_deep_layer_threshold": int(
@@ -350,6 +353,14 @@ class AnimaArtistCrossAttn:
         static_blend_alpha = float(adv.get("static_capture_blend_alpha", STATIC_CAPTURE_BLEND_ALPHA_DEFAULT))
         adv["static_capture_blend_alpha"] = max(0.0, min(1.0, static_blend_alpha))
         artist_anchor_q = bool(adv.get("artist_anchor_q", False))
+        anchor_seed_list = parse_anchor_seed_list(
+            adv.get("anchor_seed_list", ""),
+            ANCHOR_SEEDS_MAX,
+        )
+        adv["anchor_seed_list"] = anchor_seed_list
+        adv["anchor_seed_list_is_manual"] = bool(
+            adv.get("anchor_seed_list_is_manual", bool(anchor_seed_list))
+        )
         anchor_seeds_count = int(adv.get("anchor_seeds_count", 1))
         adv["anchor_seeds_count"] = max(1, min(anchor_seeds_count, ANCHOR_SEEDS_MAX))
         anchor_user_blend = float(adv.get("anchor_user_blend", 0.0))
@@ -401,6 +412,12 @@ class AnimaArtistCrossAttn:
         if not adv.get("artist_anchor_q", False):
             adv["anchor_base_norm_ref"] = False
             adv["anchor_refresh_each_step"] = False
+        elif adv["anchor_seed_list_is_manual"] and anchor_seed_list:
+            logger.info(
+                "[AnimaCrossAttn] using manual anchor_seed_list=%s; "
+                "anchor_seeds_count is ignored.",
+                ",".join(str(seed) for seed in anchor_seed_list),
+            )
         layer_route_texts = artist_pack.get("layer_routes") or []
         timing_route_texts = artist_pack.get("timing_routes") or []
 
@@ -611,6 +628,20 @@ class AnimaArtistCrossAttn:
         # (dual-mixer chain), warn once: object patches replace, so the later
         # node wins on the overlap.
         existing_patches = getattr(m, "object_patches", None) or {}
+        adapter_anchor_overlap = [
+            i
+            for i in target_blocks
+            if getattr(
+                existing_patches.get(f"diffusion_model.blocks.{i}.cross_attn.forward"),
+                "_anima_adapter_anchor_q_forward_patch",
+                False,
+            )
+        ]
+        if adapter_anchor_overlap:
+            raise ValueError(
+                "[AnimaCrossAttn] the input model already uses Adapter Q-only "
+                "Anchor. Do not chain the full Cross-Attn Mixer after it."
+            )
         overlapped = [
             i for i in target_blocks if f"diffusion_model.blocks.{i}.cross_attn.forward" in existing_patches
         ]
