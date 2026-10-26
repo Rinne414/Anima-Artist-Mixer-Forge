@@ -229,6 +229,109 @@ def _cached_mixed_context(state, context, cache_key):
     return mixed
 
 
+def _slice_batch_condition(value, rows, batch_size):
+    """Select the given batch rows from every batch-shaped tensor in a condition."""
+    if torch.is_tensor(value):
+        if value.dim() > 0 and value.shape[0] == batch_size:
+            if rows[-1] - rows[0] + 1 == len(rows):
+                return value[rows[0]:rows[-1] + 1]
+            return value[rows]
+        return value
+    if isinstance(value, dict):
+        return {
+            key: _slice_batch_condition(item, rows, batch_size)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [
+            _slice_batch_condition(item, rows, batch_size)
+            for item in value
+        ]
+    if isinstance(value, tuple):
+        return tuple(
+            _slice_batch_condition(item, rows, batch_size)
+            for item in value
+        )
+    return value
+
+
+def _call_split_cfg_context(
+    prev_wrapper, apply_model, options, state, context_key, mixed_context, mask, cou,
+):
+    """Run a mixed CFG batch as a positive group and a negative group.
+
+    The base-anchored canvas can be longer than the batched base context. The
+    negative rows must keep their original length (padding would be visible to
+    attention), so the two groups are run separately and re-joined in the
+    original row order.
+    """
+    batch_size = len(mask)
+    if options["input"].shape[0] != batch_size:
+        raise ValueError("base-anchored CFG input/context batch sizes differ")
+    if not cou or batch_size % len(cou):
+        raise ValueError("base-anchored CFG split requires valid condition markers")
+    chunk_size = batch_size // len(cou)
+    c = options["c"]
+    transformer_options = c.get("transformer_options") or {}
+    uuids = transformer_options.get("uuids")
+    if uuids is not None and len(uuids) != len(cou):
+        raise ValueError("base-anchored CFG UUID/condition counts differ")
+
+    split_options = []
+    split_context_signatures = {}
+    output_rows = []
+    for should_mix in (True, False):
+        chunks = [
+            index for index in range(len(cou))
+            if mask[index * chunk_size] == should_mix
+        ]
+        rows = [
+            row for chunk in chunks
+            for row in range(chunk * chunk_size, (chunk + 1) * chunk_size)
+        ]
+        output_rows.extend(rows)
+        markers = [cou[index] for index in chunks]
+        group_c = {
+            key: _slice_batch_condition(value, rows, batch_size)
+            for key, value in c.items() if key != "transformer_options"
+        }
+        group_transformer_options = dict(transformer_options)
+        group_transformer_options["cond_or_uncond"] = markers
+        if uuids is not None:
+            group_transformer_options["uuids"] = [uuids[index] for index in chunks]
+        group_c["transformer_options"] = group_transformer_options
+        if should_mix:
+            group_context = _slice_batch_condition(mixed_context, rows, batch_size)
+            group_c[context_key] = group_context
+            split_context_signatures[tuple(rows)] = tensor_cache_signature(group_context)
+        group_options = dict(options)
+        group_options["input"] = _slice_batch_condition(options["input"], rows, batch_size)
+        group_options["timestep"] = _slice_batch_condition(
+            options["timestep"], rows, batch_size,
+        )
+        group_options["c"] = group_c
+        group_options["cond_or_uncond"] = markers
+        group_options["_anima_adapter_mixer_skip_anchor"] = not should_mix
+        split_options.append(group_options)
+
+    # Let the Q-only Anchor recognise the sliced positive context as the same
+    # mixed context on every step, so its warm cache survives the split.
+    entry = state.get("_mixed_context_cache")
+    if isinstance(entry, dict) and entry.get("mixed") is mixed_context:
+        entry["split_context_signatures"] = split_context_signatures
+    outputs = [
+        _call_underlying(prev_wrapper, apply_model, group_options)
+        for group_options in split_options
+    ]
+    output = torch.cat(outputs, dim=0)
+    if output_rows == list(range(batch_size)):
+        return output
+    original_order = [0] * batch_size
+    for position, row in enumerate(output_rows):
+        original_order[row] = position
+    return output[original_order]
+
+
 def make_adapter_embedding_wrapper(state, prev_wrapper):
     """Replace post-adapter context at the model boundary, preserving wrapper chains."""
     def wrapper(apply_model, options):
@@ -264,6 +367,17 @@ def make_adapter_embedding_wrapper(state, prev_wrapper):
                 state.get("apply_to_uncond", False),
                 state,
             )
+            split_cfg = (
+                state["alignment_mode"] == ALIGN_BASE_ANCHORED
+                and state["alignment_plan"]["length"] > context.shape[1]
+                and not all(mask)
+            )
+            if split_cfg and not any(mask):
+                # Negative-only call: nothing to mix, so pass it straight through
+                # instead of building artist embeddings or disabling the mixer.
+                passthrough_options = dict(options)
+                passthrough_options["_anima_adapter_mixer_skip_anchor"] = True
+                return _call_underlying(prev_wrapper, apply_model, passthrough_options)
             strengths = resolve_strengths(
                 cou,
                 batch_size,
@@ -279,12 +393,6 @@ def make_adapter_embedding_wrapper(state, prev_wrapper):
                 fallback_base = context
                 if state["alignment_mode"] == ALIGN_BASE_ANCHORED:
                     plan = state["alignment_plan"]
-                    if plan["length"] > context.shape[1] and not all(mask):
-                        raise ValueError(
-                            "base-anchored context exceeds the batched base length; "
-                            "unmodified CFG rows cannot be preserved without an "
-                            "attention mask"
-                        )
                     projection_base = align_base_context(context, plan)
                 mixed_context = mix_projected_context(
                     projection_base,
@@ -300,6 +408,11 @@ def make_adapter_embedding_wrapper(state, prev_wrapper):
                     "mixed_signature": tensor_cache_signature(mixed_context),
                 }
 
+            if split_cfg:
+                return _call_split_cfg_context(
+                    prev_wrapper, apply_model, options, state,
+                    context_key, mixed_context, mask, cou,
+                )
             mixed_c = dict(c)
             mixed_c[context_key] = mixed_context
             mixed_options = dict(options)

@@ -1,5 +1,32 @@
 # Changelog
 
+## v27.7.1 (2026-10-27)
+
+Port of upstream An1X3R/Anima-Artist-Mixer PR #14 (long-prompt fix for
+`base_anchored` Adapter mixing, by Mon-Landis; upstream 26.10.10).
+
+- Fix: with long prompts, when T5 row alignment expands the `base_anchored`
+  canvas past the batched base context (about 1,700+ characters; the real
+  boundary depends on T5 token counts), the Adapter Mixer raised
+  "base-anchored context exceeds the batched base length" and switched itself
+  off for the rest of the run, so the artist style quietly dropped out.
+  Now a mixed CFG batch is split into a positive group and a negative group,
+  each is run, and the output rows are restored to their original order.
+  Latents, timesteps, batch-shaped conditioning and control tensors, CFG
+  markers, and UUIDs follow the split. The negative context keeps its
+  original length (no attention-visible zero padding).
+- Negative-only calls pass straight through: no artist embeddings are built
+  and the mixer is not disabled.
+- Q-only Anchor runs for the positive group only (negative calls are marked
+  with `_anima_adapter_mixer_skip_anchor`), and the anchor context signature
+  recognises the split slices, so the `warm_cache` trajectory survives.
+- `shared_base_ids`, batches that do not expand, node inputs, and the mixing
+  formula are unchanged.
+- Add regression tests for the long-prompt split (batch order for several CFG
+  layouts, 512-row boundary, negative-only passthrough, interrupt, anchor reuse
+  and warm cache). The forge does not yet carry upstream 26.8.3's interrupt and
+  cache-state cleanup, so those assertions were adapted.
+
 ## v27.7.0 (2026-07-27)
 
 Sync with upstream An1X3R/Anima-Artist-Mixer 26.8.2 while preserving the

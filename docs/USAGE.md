@@ -180,7 +180,13 @@ matching T5 token IDs on common positions, places unmatched artist rows in gap
 slots, and uses an LCS match only when exact suffix alignment is unavailable.
 It does not pool, truncate, or replace the artist's Qwen source embedding and
 T5 target sequence. Because negative-prompt T5 IDs are not available at the
-model wrapper, this mode keeps uncond rows unchanged.
+model wrapper, this mode keeps uncond rows unchanged. When a long prompt makes
+the aligned canvas longer than the batched base context (T5 token rows past 512,
+roughly 1,700+ characters of prompt), a mixed CFG batch is run as a positive
+group and a negative group and the outputs are restored to the original row
+order; the negative context keeps its original length instead of being padded,
+and negative-only calls pass through unchanged. The Q-only Anchor runs for the
+positive group only.
 
 `shared_base_ids` is the older A/B mode. Every artist Adapter pass uses the
 base prompt's target T5 grid, which makes positions match directly but replaces

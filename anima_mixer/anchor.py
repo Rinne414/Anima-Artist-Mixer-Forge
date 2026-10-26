@@ -88,6 +88,11 @@ def _context_signature(state, context):
                 entry.get("key"),
                 tensor_cache_signature(context),
             )
+        if isinstance(entry, dict):
+            signature = tensor_cache_signature(context)
+            for rows, split_signature in entry.get("split_context_signatures", {}).items():
+                if split_signature == signature:
+                    return ("adapter_mixed", entry.get("key"), rows)
         return ("adapter_context", tensor_cache_signature(context))
     return context_fingerprint(context)
 
@@ -482,7 +487,8 @@ def make_sigma_capture(state, prev_wrapper):
         state["_run_last_sigma"] = cur_sigma
 
         if (
-            state.get("artist_anchor_q", False)
+            not options.get("_anima_adapter_mixer_skip_anchor", False)
+            and state.get("artist_anchor_q", False)
             and not state.get("_anchor_failed", False)
             and not state.get("_embedding_mixer_failed", False)
             and in_stabilizer_window(state)
